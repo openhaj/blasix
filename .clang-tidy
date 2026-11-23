@@ -1,0 +1,45 @@
+# clang-tidy configuration for this project.
+#
+# Run with:
+#   clang-tidy -p . src/main.c   (or: make tidy)
+#
+# Or automatically through clangd (when --clang-tidy is passed).
+
+Checks: >
+  bugprone-*,
+  clang-analyzer-*,
+  misc-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-reserved-identifier,
+  -misc-non-private-member-variables-in-classes,
+  -readability-magic-numbers,
+  -readability-identifier-length,
+  -readability-function-cognitive-complexity,
+  -cert-*
+
+WarningsAsErrors: ''
+
+HeaderFilterRegex: '^(include|src)/.*\.h$'
+
+FormatStyle: file
+
+CheckOptions:
+  # Standard naming conventions.
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.TypedefCase
+    value: lower_case
+  - key: readability-identifier-naming.StructCase
+    value: lower_case
+  - key: readability-identifier-naming.EnumCase
+    value: lower_case
+# We ignore identifiers starting with __, as they are reserved for the implementation.
+  - key: readability-identifier-naming.MacroDefinitionIgnoredRegexp
+    value: '^__.*'
