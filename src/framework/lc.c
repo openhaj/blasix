@@ -1,0 +1,728 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Moutig <moutig-tan@proton.me>
+ *
+ * This file is part of blasix.
+ * See LICENSE for the full license text.
+ */
+
+/**
+ * @file lc.c
+ * @brief Test-side engine: checks, output protocol, main().
+ * @Created: 2026/11/23 04:42:37 by Moutig
+ * @Updated: 2026/11/24 00:39:49 by Moutig
+ *
+ * Linked into every test binary, compiled against the libc under
+ * test but calling none of its functions (see sys.c).
+ *
+ * Command line of a test binary:
+ *
+ *     bin                       run every test in-process, human output
+ *     bin --list                describe the tests (one line each, fd 1)
+ *     bin --run FUNC NAME       run one test
+ *
+ * When fd 3 is open (lcrun sets it to a pipe), --run writes machine
+ * events there; the test's own stdout / stderr stay free for the libc
+ * under test. Protocol, one event per line, tab-separated, fields
+ * escaped (\t \n \\):
+ *
+ *     @test  CAT FUNC NAME FILE LINE TIMEOUT EXPECT SINCE UNTIL OPT REF  (--list)
+ *     @fail  FILE LINE MESSAGE
+ *     @skip  REASON
+ *     @log   MESSAGE
+ *     @end   pass|fail|skip ASSERTS FAILED
+ *
+ * Without fd 3 (a binary run by hand, e.g. under a debugger) the same
+ * information is printed for humans on stderr.
+ *
+ * Output goes through a small buffer of this file (gBuf) flushed with
+ * raw write(2): no stdio, no malloc. Numbers, pointers and quoted
+ * strings are formatted here too.
+ */
+
+#define LC_FRAMEWORK
+#include "framework/lc.h"
+#include "framework/sys.h"
+
+/*
+ * Bounds of the "lc_tests" section, provided by the linker. Weak: a
+ * binary without any test links too (both are then NULL).
+ */
+extern const struct lc_test	__start_lc_tests[] __attribute__((weak));
+extern const struct lc_test	__stop_lc_tests[] __attribute__((weak));
+
+/**
+ * @brief Write the coverage counters of this process (cov.c).
+ *
+ * Only defined in coverage builds (COV=1): the weak reference is NULL
+ * otherwise and main() does not call it.
+ */
+void	lc_covDump(void) __attribute__((weak));
+
+/* ----- State ----- */
+
+static int					gProto;		/* 1: events on fd 3 for lcrun */
+static int					gFd = 2;	/* where reports go */
+static int					gEscape;	/* escape \t \n \\ while writing a field */
+static int					gAsserts;	/* checks run by the current test */
+static int					gFailed;	/* checks failed by the current test */
+static int					gSkipped;	/* the current test called SKIP */
+
+/* ----- Output (own buffer, raw write) ----- */
+
+static char		gBuf[4096];	/* pending output */
+static unsigned	gLen;		/* bytes used in gBuf */
+
+/**
+ * @brief Write the pending output to gFd and empty the buffer.
+ *
+ * Loops on short writes; stops on an error (nothing else can be done
+ * with a report that cannot be written).
+ */
+static void	lcFlush(void)
+{
+	unsigned	off;
+	long		r;
+
+	off = 0;
+	while (off < gLen)
+	{
+		r = lc_sysWrite(gFd, gBuf + off, gLen - off);
+		if (r <= 0)
+			break ;
+		off += (unsigned)r;
+	}
+	gLen = 0;
+}
+
+/**
+ * @brief Append one byte to the output buffer, as is.
+ *
+ * @param c Byte to append (the buffer is flushed first when full).
+ */
+static void	lcRawc(char c)
+{
+	if (gLen == sizeof(gBuf))
+		lcFlush();
+	gBuf[gLen++] = c;
+}
+
+/**
+ * @brief Append one character, escaped when writing a protocol field.
+ *
+ * With gEscape set, tab, newline and backslash become \\t, \\n and \\\\ so
+ * that a field never breaks the tab-separated, one-event-per-line
+ * protocol.
+ *
+ * @param c Character to append.
+ */
+static void	lcc(char c)
+{
+	if (gEscape && (c == '\t' || c == '\n' || c == '\\'))
+	{
+		lcRawc('\\');
+		c = (c == '\t') ? 't' : (c == '\n') ? 'n' : '\\';
+	}
+	lcRawc(c);
+}
+
+/**
+ * @brief Append a string.
+ *
+ * @param s NUL-terminated string; NULL is written as "(null)".
+ */
+static void	lcs(const char *s)
+{
+	if (s == 0)
+		s = "(null)";
+	while (*s)
+		lcc(*s++);
+}
+
+/**
+ * @brief Append an unsigned integer in decimal.
+ *
+ * @param v Value.
+ */
+static void	lcu(unsigned long long v)
+{
+	char	tmp[24];
+	int		i;
+
+	i = 0;
+	do
+		tmp[i++] = (char)('0' + v % 10);
+	while ((v /= 10) != 0);
+	while (i > 0)
+		lcc(tmp[--i]);
+}
+
+/**
+ * @brief Append a signed integer in decimal.
+ *
+ * LLONG_MIN is handled without overflow: -(v + 1) + 1 is computed in
+ * unsigned arithmetic.
+ *
+ * @param v Value.
+ */
+static void	lci(long long v)
+{
+	if (v < 0)
+	{
+		lcc('-');
+		lcu((unsigned long long)(-(v + 1)) + 1);
+	}
+	else
+		lcu((unsigned long long)v);
+}
+
+/**
+ * @brief Append the low @p digits hexadecimal digits of @p v.
+ *
+ * @param v      Value.
+ * @param digits Number of digits, leading zeros included.
+ */
+static void	lcx(unsigned long long v, int digits)
+{
+	static const char	hex[] = "0123456789abcdef";
+	int					i;
+
+	for (i = digits - 1; i >= 0; i--)
+		lcc(hex[(v >> (i * 4)) & 0xf]);
+}
+
+/**
+ * @brief Append a pointer: "NULL" or 0x followed by every hex digit.
+ *
+ * @param p Pointer.
+ */
+static void	lcPtr(const void *p)
+{
+	if (p == 0)
+	{
+		lcs("NULL");
+		return ;
+	}
+	lcs("0x");
+	lcx((unsigned long long)(__UINTPTR_TYPE__)p, (int)sizeof(void *) * 2);
+}
+
+/**
+ * @brief Append a string quoted, escaped and truncated, for failure messages.
+ *
+ * Quotes and backslashes are escaped, non-printable bytes are written
+ * as \\xHH, and only the first 80 bytes are shown (then "...").
+ *
+ * @param s String, or NULL (written as NULL, without quotes).
+ */
+static void	lcQuoted(const char *s)
+{
+	int	n;
+
+	if (s == 0)
+	{
+		lcs("NULL");
+		return ;
+	}
+	lcc('"');
+	for (n = 0; s[n] && n < 80; n++)
+	{
+		unsigned char	c = (unsigned char)s[n];
+
+		if (c == '"' || c == '\\')
+		{
+			lcc('\\');
+			lcc((char)c);
+		}
+		else if (c >= 0x20 && c < 0x7f)
+			lcc((char)c);
+		else
+		{
+			lcs("\\x");
+			lcx(c, 2);
+		}
+	}
+	lcc('"');
+	if (s[n])
+		lcs("...");
+}
+
+/* ----- Small string helpers (no libc) ----- */
+
+lc_size_t	lc_strlen(const char *s)
+{
+	lc_size_t	n;
+
+	n = 0;
+	while (s[n])
+		n++;
+	return (n);
+}
+
+void	lc_fill(void *p, int c, lc_size_t n)
+{
+	volatile unsigned char	*d = p;
+
+	while (n--)
+		*d++ = (unsigned char)c;
+}
+
+int	lc_unlink(const char *path)
+{
+	return ((int)lc_sysUnlink(path));
+}
+
+void	lc_exitNow(int status)
+{
+	lc_sysExit(status);
+}
+
+/**
+ * @brief Are two strings equal? (strcmp() == 0 without the libc).
+ *
+ * @param a First string.
+ * @param b Second string.
+ * @return 1 if equal, 0 otherwise.
+ */
+static int	lcStreq(const char *a, const char *b)
+{
+	while (*a && *a == *b)
+	{
+		a++;
+		b++;
+	}
+	return (*a == *b);
+}
+
+char	*lc_tmpPath(char *buf, lc_size_t size, const char *tag)
+{
+	static const char	pre[] = "/tmp/lc-";
+	char				num[24];
+	lc_size_t			i;
+	lc_size_t			j;
+	long				pid;
+	int					k;
+
+	i = 0;
+	for (j = 0; pre[j] && i + 1 < size; j++)
+		buf[i++] = pre[j];
+	pid = lc_sysGetpid();
+	k = 0;
+	do
+		num[k++] = (char)('0' + pid % 10);
+	while ((pid /= 10) != 0);
+	while (k > 0 && i + 1 < size)
+		buf[i++] = num[--k];
+	if (i + 1 < size)
+		buf[i++] = '-';
+	for (j = 0; tag[j] && i + 1 < size; j++)
+		buf[i++] = tag[j];
+	buf[i] = '\0';
+	return (buf);
+}
+
+/* ----- Failure reporting ----- */
+
+/**
+ * @brief Count a failure and write the start of its report.
+ *
+ * Protocol: "@fail\tFILE\tLINE\t" then the message, escaped. Human
+ * output: "    FAIL file:line: ". The caller appends the values and ends
+ * the line with lcFailEnd().
+ *
+ * @param file Source file of the check.
+ * @param line Source line of the check.
+ * @param text Text of the macro, written first in the message.
+ */
+static void	lcFailBegin(const char *file, int line, const char *text)
+{
+	gFailed++;
+	if (gProto)
+	{
+		gEscape = 0;
+		lcs("@fail\t");
+		gEscape = 1;
+		lcs(file);
+		gEscape = 0;
+		lcc('\t');
+		gEscape = 1;
+		lci(line);
+		gEscape = 0;
+		lcc('\t');
+		gEscape = 1;
+	}
+	else
+	{
+		lcs("    FAIL ");
+		lcs(file);
+		lcc(':');
+		lci(line);
+		lcs(": ");
+	}
+	lcs(text);
+	lcs(": ");
+}
+
+/**
+ * @brief End the report of a failure and flush it.
+ *
+ * Flushed at once: if the test crashes right after, the failure is
+ * already with lcrun.
+ */
+static void	lcFailEnd(void)
+{
+	gEscape = 0;
+	lcc('\n');
+	lcFlush();
+}
+
+int	lc_check(int ok, const char *file, int line, const char *text)
+{
+	gAsserts++;
+	if (ok)
+		return (1);
+	lcFailBegin(file, line, text);
+	lcs("failed");
+	lcFailEnd();
+	return (0);
+}
+
+int		lc_checkInt(int ok,
+					const char	*file,	int			line,	const char	*text,
+					long long	a,		long long	b,		const char	*op)
+{
+	gAsserts++;
+	if (ok)
+		return (1);
+	lcFailBegin(file, line, text);
+	lci(a);
+	lcc(' ');
+	lcs(op);
+	lcc(' ');
+	lci(b);
+	lcs(" is false");
+	lcFailEnd();
+	return (0);
+}
+
+int		lc_checkUint(int ok,
+					 const char			*file,	int					line,	const char	*text,
+					 unsigned long long	a,		unsigned long long	b,		const char	*op)
+{
+	gAsserts++;
+	if (ok)
+		return (1);
+	lcFailBegin(file, line, text);
+	lcu(a);
+	lcc(' ');
+	lcs(op);
+	lcc(' ');
+	lcu(b);
+	lcs(" is false");
+	lcFailEnd();
+	return (0);
+}
+
+int		lc_checkPtr(int ok,
+					const char	*file,	int			line, const char *text,
+					const void	*a,		const void	*b)
+{
+	gAsserts++;
+	if (ok)
+		return (1);
+	lcFailBegin(file, line, text);
+	lcPtr(a);
+	lcs(" vs ");
+	lcPtr(b);
+	lcFailEnd();
+	return (0);
+}
+
+int		lc_checkStr(int wantEqual,
+					const char	*file,	int			line, const char *text,
+					const char	*a,		const char	*b)
+{
+	int			eq;
+	lc_size_t	i;
+
+	gAsserts++;
+	if (a == 0 || b == 0)
+		eq = (a == b);
+	else
+		eq = lcStreq(a, b);
+	if (eq == wantEqual)
+		return (1);
+	lcFailBegin(file, line, text);
+	lcQuoted(a);
+	lcs(wantEqual ? " vs " : " equals ");
+	lcQuoted(b);
+	if (wantEqual && a != 0 && b != 0)
+	{
+		for (i = 0; a[i] && a[i] == b[i]; i++)
+			;
+		lcs(" (first difference at index ");
+		lcu(i);
+		lcc(')');
+	}
+	lcFailEnd();
+	return (0);
+}
+
+int		lc_checkMem(const char	*file,	int			line,	const char	*text,
+					const void	*a,		const void	*b,		lc_size_t	n)
+{
+	const unsigned char	*pa = a;
+	const unsigned char	*pb = b;
+	lc_size_t			i;
+
+	gAsserts++;
+	if (pa == 0 || pb == 0)
+	{
+		if (pa == pb)
+			return (1);
+		lcFailBegin(file, line, text);
+		lcs("NULL pointer");
+		lcFailEnd();
+		return (0);
+	}
+	for (i = 0; i < n && pa[i] == pb[i]; i++)
+		;
+	if (i == n)
+		return (1);
+	lcFailBegin(file, line, text);
+	lcs("differ at byte ");
+	lcu(i);
+	lcs(": 0x");
+	lcx(pa[i], 2);
+	lcs(" vs 0x");
+	lcx(pb[i], 2);
+	lcFailEnd();
+	return (0);
+}
+
+void	lc_skip(const char *reason)
+{
+	gSkipped = 1;
+	if (gProto)
+	{
+		lcs("@skip\t");
+		gEscape = 1;
+		lcs(reason);
+		gEscape = 0;
+	}
+	else
+	{
+		lcs("    SKIP ");
+		lcs(reason);
+	}
+	lcc('\n');
+	lcFlush();
+}
+
+void	lc_log(const char *msg)
+{
+	if (gProto)
+	{
+		lcs("@log\t");
+		gEscape = 1;
+		lcs(msg);
+		gEscape = 0;
+	}
+	else
+	{
+		lcs("    LOG  ");
+		lcs(msg);
+	}
+	lcc('\n');
+	lcFlush();
+}
+
+/* ----- Running ----- */
+
+/**
+ * @brief Append an escaped protocol field followed by a tab.
+ *
+ * @param s Field value.
+ */
+static void	lcField(const char *s)
+{
+	gEscape = 1;
+	lcs(s);
+	gEscape = 0;
+	lcc('\t');
+}
+
+/**
+ * @brief Run one test body and report its result.
+ *
+ * Resets the per-test counters, calls the body, then writes "@end" (for
+ * lcrun) or a PASS / FAIL / SKIP line (for humans). A body that exits
+ * or dies never reaches the report: lcrun judges it by the process
+ * status against the test's `expect`.
+ *
+ * @param t Test to run.
+ * @return 1 if a check failed, 0 otherwise (pass or skip).
+ */
+static int	lcRunOne(const struct lc_test *t)
+{
+	const char	*status;
+
+	gAsserts = 0;
+	gFailed = 0;
+	gSkipped = 0;
+	t->fn();
+	status = gFailed ? "fail" : gSkipped ? "skip" : "pass";
+	if (gProto)
+	{
+		lcs("@end\t");
+		lcs(status);
+		lcc('\t');
+		lci(gAsserts);
+		lcc('\t');
+		lci(gFailed);
+		lcc('\n');
+	}
+	else
+	{
+		lcs(gFailed ? "  FAIL  " : gSkipped ? "  SKIP  " : "  PASS  ");
+		lcs(t->category);
+		lcc('/');
+		lcs(t->function);
+		lcc('/');
+		lcs(t->name);
+		lcs(" (");
+		lci(gAsserts);
+		lcs(" checks)\n");
+	}
+	lcFlush();
+	return (gFailed != 0);
+}
+
+/**
+ * @brief --list: one "@test" line per test of the binary, on fd 1.
+ *
+ * Absent optional fields are written as "-". REF is last, so it may be
+ * the only field holding arbitrary text.
+ */
+static void	lcList(void)
+{
+	const struct lc_test	*t;
+
+	gFd = 1;
+	for (t = __start_lc_tests; t < __stop_lc_tests; t++)
+	{
+		lcs("@test\t");
+		lcField(t->category);
+		lcField(t->function);
+		lcField(t->name);
+		lcField(t->file);
+		lci(t->line);
+		lcc('\t');
+		lci(t->timeout);
+		lcc('\t');
+		lci(t->expect);
+		lcc('\t');
+		lcField(t->since ? t->since : "-");
+		lcField(t->until ? t->until : "-");
+		lcField(t->opt ? t->opt : "-");
+		gEscape = 1;
+		lcs(t->ref ? t->ref : "-");
+		gEscape = 0;
+		lcc('\n');
+	}
+	lcFlush();
+}
+
+/**
+ * @brief Run every test in this process, one after the other (no lcrun).
+ *
+ * For debugging only: no isolation, no timeout, no since / until / opt
+ * filtering. Tests that expect an exit or a signal are skipped, since
+ * they would end the process.
+ *
+ * @return 1 if a test failed, 0 otherwise.
+ */
+static int	lcRunAll(void)
+{
+	const struct lc_test	*t;
+	int						total;
+	int						failed;
+
+	total = 0;
+	failed = 0;
+	for (t = __start_lc_tests; t < __stop_lc_tests; t++)
+	{
+		if (t->expect != LC_NORMAL)
+		{
+			lcs("  SKIP  ");
+			lcs(t->name);
+			lcs(" (expects an exit or a signal: run it through lcrun)\n");
+			continue ;
+		}
+		total++;
+		failed += lcRunOne(t);
+	}
+	lci(total);
+	lcs(" tests, ");
+	lci(failed);
+	lcs(" failed\n");
+	lcFlush();
+	return (failed != 0);
+}
+
+/**
+ * @brief Entry point of every test binary (see the command line above).
+ *
+ * fd 3 open at startup means "run by lcrun": events go there in the
+ * machine protocol. After a test run with --run, the coverage counters
+ * are written when the binary was built with COV=1.
+ *
+ * @param argc Argument count.
+ * @param argv Arguments.
+ * @return 0 when every test run passed or was skipped, 1 if one failed,
+ *         2 for a usage error or an unknown test.
+ */
+int	main(int argc, char **argv)
+{
+	const struct lc_test	*t;
+
+	gProto = (lc_sysFcntl(3, LC_F_GETFD, 0) >= 0);
+	if (argc >= 2 && lcStreq(argv[1], "--list"))
+	{
+		lcList();
+		return (0);
+	}
+	if (argc >= 4 && lcStreq(argv[1], "--run"))
+	{
+		if (gProto)
+			gFd = 3;
+		for (t = __start_lc_tests; t < __stop_lc_tests; t++)
+		{
+			int	failed;
+
+			if (!lcStreq(t->function, argv[2]) || !lcStreq(t->name, argv[3]))
+				continue ;
+			failed = lcRunOne(t);
+			if (lc_covDump)
+				lc_covDump();
+			return (failed);
+		}
+		lcs("blasix: no test ");
+		lcs(argv[2]);
+		lcc('/');
+		lcs(argv[3]);
+		lcc('\n');
+		lcFlush();
+		return (2);
+	}
+	if (argc >= 2)
+	{
+		lcs("usage: ");
+		lcs(argv[0]);
+		lcs(" [--list | --run FUNCTION NAME]\n");
+		lcFlush();
+		return (2);
+	}
+	gProto = 0;
+	return (lcRunAll());
+}
