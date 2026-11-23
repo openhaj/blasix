@@ -9,7 +9,7 @@ objs/
 *.exe
 *.out
 
-/build/
+build/
 test/build/
 test/**/build/
 
@@ -30,3 +30,5 @@ compile_commands.json
 .cache/
 clangd/
 .clangd/
+
+/data/*

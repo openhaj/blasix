@@ -8,7 +8,6 @@ CompileFlags:
   # Flags to add for analysis.
   Add:
     - -Iinclude
-    - -Isrc
     - -Wall
     - -Wextra
     - -Wpedantic
@@ -29,3 +28,13 @@ CompileFlags:
     - -Wno-reserved-identifier
     - -Wno-reserved-macro-identifier
     - -std=c11
+
+---
+# Test units: the Makefile derives these from src/suites/<cat>/<func>.c.
+If:
+  PathMatch: src/suites/.*\.c
+CompileFlags:
+  Add:
+    - -DLC_CATEGORY="suite"
+    - -DLC_FUNCTION="suite"
+    - -fno-builtin

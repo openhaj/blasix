@@ -1,207 +1,81 @@
-# Makefile - generic build for C projects.
+# blasix - conformance tests for C libraries, driven by the spec.
 #
-# Configuration lives in mk/config.mk (project name, type, std...)
-# and mk/sources.mk (source list). Run `make help` for the targets.
-
-include mk/config.mk
-include mk/sources.mk
-
-# ----- Output name -----
-
-ifeq ($(TYPE),exec)
-NAME	?= $(PROJECT_NAME)
-else ifeq ($(TYPE),static)
-NAME	?= lib$(PROJECT_NAME).a
-else ifeq ($(TYPE),shared)
-NAME	?= lib$(PROJECT_NAME).so
-else
-$(error TYPE must be one of: exec, static, shared (got '$(TYPE)'))
-endif
-
-# ----- Toolchain and flags -----
-
-CC	?= cc
-AR	?= ar
-ARFLAGS	:= rcs
-
-# Build mode: release | debug | asan
-MODE	?= release
-
-WARNINGS := \
-	-Wall -Wextra -Wpedantic \
-	-Wshadow -Wconversion -Wsign-conversion -Wcast-align \
-	-Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations \
-	-Wold-style-definition -Wpointer-arith -Wwrite-strings -Wundef \
-	-Wredundant-decls -Wnested-externs
-
-CPPFLAGS	+= -I$(INC_DIR) -I$(SRC_DIR) -MMD -MP \
-		   -D$(shell echo '$(PROJECT_NAME)' | tr 'a-z-' 'A-Z_')_VERSION='"$(VERSION)"'
-CFLAGS		+= -std=$(STD) $(WARNINGS)
-LDFLAGS		+=
-LDLIBS		+=
-
-ifeq ($(MODE),release)
-CFLAGS		+= -O2
-CPPFLAGS	+= -DNDEBUG
-else ifeq ($(MODE),debug)
-CFLAGS		+= -O0 -g3
-else ifeq ($(MODE),asan)
-CFLAGS		+= -O1 -g3 -fno-omit-frame-pointer -fsanitize=address,undefined
-LDFLAGS		+= -fsanitize=address,undefined
-else
-$(error MODE must be one of: release, debug, asan (got '$(MODE)'))
-endif
-
-ifeq ($(WERROR),1)
-CFLAGS		+= -Werror
-endif
-
-ifeq ($(TYPE),shared)
-CFLAGS		+= -fPIC
-LDFLAGS		+= -shared
-endif
-
-# ----- Sources and objects -----
-
-SRCS	:= $(addprefix $(SRC_DIR)/,$(SRC))
-OBJDIR	:= $(BUILD_DIR)/$(MODE)
-OBJS	:= $(patsubst %,$(OBJDIR)/%.o,$(basename $(SRCS)))
-DEPS	:= $(OBJS:.o=.d)
-
-# Relink when MODE changes, even if no object is out of date.
-MODE_STAMP := $(BUILD_DIR)/.mode
-$(shell mkdir -p $(BUILD_DIR); \
-	[ "$$(cat $(MODE_STAMP) 2>/dev/null)" = "$(MODE)" ] || echo $(MODE) > $(MODE_STAMP))
-
-# Install locations
-PREFIX	?= /usr/local
-DESTDIR	?=
-
-# ----- Main targets -----
+# Layout:
+#   spec/            what each standard requires, one file per header
+#   src/suites/      one test file per function: <header>/<function>.c
+#   src/framework/   test-side engine (no libc dependency, raw syscalls)
+#   src/runner/      lcrun, built with the host libc
+#   include/         headers of the framework and of lcrun
+#   mk/              build modules; mk/libc/: one profile per libc
+#   data/            texts of the 8 standards (not versioned, data/README.md)
+#   plan.md          order in which the headers are specified and tested
+#
+# Target (what the libc is checked against):
+#   STD=posix-2024   c99 c11 c17 c23 posix-2001 posix-2008 posix-2017 posix-2024
+#   OPTS=XSI         option groups, comma list (make options): POSIX ones
+#                    (default XSI on a POSIX target) and ISO C features
+#                    (THREADS, COMPLEX, ATOMICS, LIB_EXT1, ...)
+#   EXT=0            1: also the extensions (GNU, BSD) listed in spec/
+#
+# Usage:
+#   make run                         build + probe + run (LIBC=host)
+#   make run LIBC=hajlibc            against hajlibc (HAJLIBC=path)
+#   make run STD=c11 OPTS=THREADS    another target
+#   make run CAT=string FUNC=strlen  only some units (comma lists)
+#   make run TEST='*/strlen/*' V=1   glob on cat/func/name, verbose
+#   make run REPEAT=20               flakiness (each test run 20 times)
+#   make run-all                     the 8 standards, one line each
+#   make compare A=host B=hajlibc    same target, two libcs, what differs
+#   make coverage LIBC=hajlibc       line coverage of the libc sources
+#
+# Spec and progress:
+#   make spec-list                   interfaces the target requires (V=1: all)
+#   make spec-check                  lint spec/ and src/suites/
+#   make matrix [CAT=a,b]            tested / required per header, 8 standards
+#   make todo [CAT=a,b]              required by the target, no test yet
+#   make standards / options         the standards, the option groups
+#   make new CAT=string FUNC=strchr  create src/suites/string/strchr.c
+#                                    (SINCE=V adds the spec entry, HEADER=x/y.h)
+#   make clean / fclean              remove build/$(LIBC) / build/
+#
+# Tooling:
+#   make init                        enable the git hooks
+#   make headers-check / headers-add license headers
+#   make compdb / tidy / format      clangd database, clang-tidy, clang-format
+#
+# Options: SHOW_FLAGS=1 (full command lines), JOBS=n
 
 .DEFAULT_GOAL := all
 
-all: $(NAME)
+include mk/config.mk
+include mk/sources.mk
+include mk/build.mk
+include mk/runner.mk
+include mk/target.mk
+include mk/tests.mk
+include mk/run.mk
+include mk/tooling.mk
 
-$(NAME): $(OBJS) $(MODE_STAMP)
-ifeq ($(TYPE),static)
-	@echo "AR $@"
-	@$(AR) $(ARFLAGS) $@ $(OBJS)
-else
-	@echo "LD $@"
-	@$(CC) $(LDFLAGS) $(OBJS) $(LDLIBS) -o $@
-endif
+.PHONY: all build new clean fclean help libc-prepare
 
-debug:
-	@$(MAKE) --no-print-directory MODE=debug
+all: build
 
-asan:
-	@$(MAKE) --no-print-directory MODE=asan
+# The units and probes are only known once spec.mk exists, hence the
+# sub-make. With nothing selected it is skipped (an empty goal list
+# would rebuild the default goal, forever).
+build: $(RUNNER) libc-prepare
+	$(if $(strip $(BINS) $(PROBE_OUT)),@$(MAKE) --no-print-directory -s $(BINS) $(PROBE_OUT))
 
-release:
-	@$(MAKE) --no-print-directory MODE=release
-
-run: all
-ifeq ($(TYPE),exec)
-	@./$(NAME) $(ARGS)
-else
-	$(error `make run` only works with TYPE=exec)
-endif
+new:
+	@scripts/new-test.sh "$(CAT)" "$(FUNC)" "$(SINCE)" "$(HEADER)"
 
 clean:
-	@echo "RM $(BUILD_DIR)/"
-	@rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR)/$(LIBC)
 
-fclean: clean
-	@echo "RM $(NAME)"
-	@rm -f $(NAME) $(PROJECT_NAME) lib$(PROJECT_NAME).a lib$(PROJECT_NAME).so
-
-re: fclean
-	@$(MAKE) --no-print-directory all
-
-# ----- Install -----
-
-install: all
-ifeq ($(TYPE),exec)
-	install -Dm755 $(NAME) $(DESTDIR)$(PREFIX)/bin/$(NAME)
-else
-	install -Dm644 $(NAME) $(DESTDIR)$(PREFIX)/lib/$(NAME)
-	@if [ -n "$$(find $(INC_DIR) -type f -name '*.h' 2>/dev/null)" ]; then \
-		mkdir -p $(DESTDIR)$(PREFIX)/include; \
-		cp -r $(INC_DIR)/. $(DESTDIR)$(PREFIX)/include/; \
-		rm -f $(DESTDIR)$(PREFIX)/include/.gitkeep; \
-	fi
-endif
-
-uninstall:
-ifeq ($(TYPE),exec)
-	rm -f $(DESTDIR)$(PREFIX)/bin/$(NAME)
-else
-	rm -f $(DESTDIR)$(PREFIX)/lib/$(NAME)
-	@cd $(INC_DIR) && find . -type f -name '*.h' | while IFS= read -r h; do \
-		rm -f "$(DESTDIR)$(PREFIX)/include/$$h"; \
-	done
-endif
-
-# ----- Tooling -----
-
-# Generate compile_commands.json for clangd (needs `bear`).
-compdb:
-	@command -v bear >/dev/null 2>&1 || { echo "bear not found"; exit 1; }
-	@$(MAKE) --no-print-directory clean
-	@bear -- $(MAKE) --no-print-directory all
-
-# Run clang-tidy on every source file (uses .clang-tidy).
-tidy:
-	@clang-tidy $(SRCS) -- $(CPPFLAGS) -std=$(STD)
-
-# Format sources in place (needs a .clang-format file).
-format:
-	@[ -f .clang-format ] || { echo "No .clang-format file"; exit 1; }
-	@find $(SRC_DIR) $(INC_DIR) -type f \( -name '*.c' -o -name '*.h' \) \
-		-exec clang-format -i {} +
-
-init:
-	@echo "Installing git hooks..."
-	@git config core.hooksPath .githooks
-	@chmod +x .githooks/pre-commit
-	@chmod +x scripts/*.sh
-	@echo "Done. Git hooks are now active."
-
-headers-add:
-	@find $(SRC_DIR) $(INC_DIR) -type f \( -name '*.c' -o -name '*.h' -o -name '*.hpp' \
-		-o -name '*.cpp' -o -name '*.inl' -o -name '*.S' \) \
-		-exec ./scripts/header.sh {} \;
-
-headers-check:
-	@./scripts/header-check.sh
+fclean:
+	rm -rf $(BUILD_DIR)
 
 help:
-	@echo "$(PROJECT_NAME) $(VERSION) ($(TYPE) -> $(NAME))"
-	@echo ""
-	@echo "Build:"
-	@echo "  all            build \$$(NAME) (default, MODE=$(MODE))"
-	@echo "  debug          build with -O0 -g3"
-	@echo "  asan           build with AddressSanitizer + UBSan"
-	@echo "  release        build with -O2 -DNDEBUG"
-	@echo "  run            build and run (exec only, pass ARGS=...)"
-	@echo "  clean          remove $(BUILD_DIR)/"
-	@echo "  fclean         clean + remove \$$(NAME)"
-	@echo "  re             fclean + all"
-	@echo "  install        install to \$$(DESTDIR)\$$(PREFIX) ($(PREFIX))"
-	@echo "  uninstall      remove installed files"
-	@echo ""
-	@echo "Tooling:"
-	@echo "  compdb         generate compile_commands.json (bear)"
-	@echo "  tidy           run clang-tidy"
-	@echo "  format         run clang-format"
-	@echo "  init           install git hooks"
-	@echo "  headers-add    add license headers to files missing one"
-	@echo "  headers-check  check license headers"
-	@echo ""
-	@echo "Options: MODE=release|debug|asan  WERROR=1  SHOW_FLAGS=1  UNWIND=1"
+	@sed -n '2,/^$$/p' Makefile | sed 's/^# \{0,1\}//'
 
-.PHONY: all debug asan release run clean fclean re install uninstall \
-	compdb tidy format init headers-add headers-check help
-
-include mk/build.mk
+-include $(DEPS)

@@ -1,7 +1,7 @@
-# clang-tidy configuration for this project.
+# clang-tidy configuration for blasix.
 #
 # Run with:
-#   clang-tidy -p . src/main.c   (or: make tidy)
+#   make tidy   (lcrun and the framework)
 #
 # Or automatically through clangd (when --clang-tidy is passed).
 
