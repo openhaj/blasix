@@ -8,9 +8,9 @@
 
 /**
  * @file exec.c
- * @brief lcrun: run every test in its own process, N at a time.
- * @Created: 2026/11/23 04:44:45 by Moutig
- * @Updated: 2026/11/24 00:44:33 by Moutig
+ * @brief The process pool that runs the tests.
+ * @Created: 2026/11/24 08:15:05 by Moutig
+ * @Updated: 2026/11/24 08:21:18 by Moutig
  *
  * Each test runs as `bin --run FUNC NAME` in a fresh process (its own
  * process group), with:
@@ -28,15 +28,19 @@
 
 #include "runner/lcrun.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <fnmatch.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 /** Captured stdout + stderr kept per test (the rest is dropped). */
@@ -66,6 +70,18 @@ typedef struct s_slot
 	int		ended;		/* "@end" seen */
 	int		endSt;		/* status from @end */
 }	t_slot;
+
+/** Width of the progress bar, in characters. */
+#define LC_BAR	30
+
+const char	*statusName(t_status st)
+{
+	static const char	*names[ST_COUNT] = {
+		"pass", "fail", "skip", "crash", "timeout", "error", "unavailable"
+	};
+
+	return (names[st]);
+}
 
 /**
  * @brief Close @p fd in the children spawned later (FD_CLOEXEC).
@@ -354,17 +370,38 @@ static void	finish(t_slot *s, int wst, const struct rusage *ru)
 }
 
 /**
- * @brief Show "running done/total" on a terminal (nothing with -q or no tty).
+ * @brief Draw the progress bar of the run on a terminal (nothing with -q
+ *        or when stdout is not a terminal):
  *
- * @param r     Run.
- * @param done  Tests finished.
- * @param total Tests to run.
+ *     testing [##########....................]  523/1376  2 failed
+ *
+ * Redrawn at most every 50 ms (and for the last test), then erased.
+ *
+ * @param r      Run.
+ * @param done   Tests finished.
+ * @param total  Tests to run.
+ * @param failed Finished tests that did not pass (fail, crash, ...).
  */
-static void	progress(const t_run *r, size_t done, size_t total)
+static void	progress(const t_run *r, size_t done, size_t total, size_t failed)
 {
-	if (r->o.quiet || !r->o.color)
+	static double	last;
+	double			now = nowMs();
+	char			bar[LC_BAR + 1];
+	size_t			fill;
+	int				digits = snprintf(NULL, 0, "%zu", total);
+
+	if (r->o.quiet || !r->o.color || total == 0)
 		return ;
-	fprintf(stderr, "\r\033[2K  running %zu/%zu", done, total);
+	if (done < total && now - last < 50)
+		return ;
+	last = now;
+	fill = done * LC_BAR / total;
+	for (size_t i = 0; i < LC_BAR; i++)
+		bar[i] = i < fill ? '#' : '.';
+	bar[LC_BAR] = '\0';
+	fprintf(stderr, "\r\033[2K  testing [%s] %*zu/%zu", bar, digits, done, total);
+	if (failed)
+		fprintf(stderr, "  \033[31m%zu failed\033[0m", failed);
 	if (done == total)
 		fprintf(stderr, "\r\033[2K");
 }
@@ -376,6 +413,7 @@ void	runAll(t_run *r)
 	size_t			next;
 	size_t			done;
 	size_t			total;
+	size_t			failed;
 	int				active;
 
 	signal(SIGPIPE, SIG_IGN);
@@ -386,7 +424,9 @@ void	runAll(t_run *r)
 	total = r->nTests * (size_t)r->o.repeat;
 	next = 0;
 	done = 0;
+	failed = 0;
 	active = 0;
+	progress(r, 0, total, 0);
 	while (done < total)
 	{
 		/* fill free slots */
@@ -457,10 +497,11 @@ void	runAll(t_run *r)
 			if (s->outFd >= 0)
 				close(s->outFd);
 			finish(s, wst, &ru);
+			failed += (s->t->st != ST_PASS && s->t->st != ST_SKIP);
 			s->pid = 0;
 			active--;
 			done++;
-			progress(r, done, total);
+			progress(r, done, total, failed);
 		}
 	}
 	(void)active;

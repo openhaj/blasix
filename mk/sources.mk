@@ -4,14 +4,34 @@
 # ----- lcrun (host libc) -----
 
 RUNNER_SRCS		:= \
-	exec.c \
+	cli.c \
 	main.c \
-	report.c \
-	spec.c \
-	tools.c \
+	util.c \
+	report/compare.c \
+	report/conformance.c \
+	report/console.c \
+	report/export.c \
+	run/discover.c \
+	run/exec.c \
+	spec/database.c \
+	spec/require.c \
+	spec/standards.c \
+	spec/visibility.c \
+	tools/check.c \
+	tools/coverage.c \
+	tools/list.c \
+	tools/make.c \
+	tools/matrix.c \
+	tools/probes.c \
 
 RUNNER_HDRS		:= \
+	cli.h \
 	lcrun.h \
+	report.h \
+	run.h \
+	spec.h \
+	tools.h \
+	util.h \
 
 # ----- Framework (libc under test) -----
 
@@ -38,10 +58,12 @@ FW_HDRS			:= $(addprefix $(INC_DIR)/framework/,$(FW_HDRS))
 
 include mk/suites.mk
 
-# <category>/<unit>, as lcrun names them (LC_UNITS in spec.mk).
+# <category>/<group>/<unit>: the source paths, as lcrun prints them
+# (LC_UNITS in spec.mk) and as bin/ is laid out.
 SUITE_UNITS		:= $(foreach c,$(CATEGORIES),$(addprefix $(c)/,$($(c)_UNITS)))
 SUITES			:= $(addprefix $(SUITES_DIR)/,$(addsuffix .c,$(SUITE_UNITS)))
-SUITE_HDRS		:= $(foreach c,$(CATEGORIES),$(addprefix $(SUITES_DIR)/$(c)/,$($(c)_HDRS)))
+SUITE_HDRS		:= $(foreach c,$(CATEGORIES),$(addprefix $(SUITES_DIR)/$(c)/,$($(c)_HDRS))) \
+	$(addprefix $(SUITES_DIR)/bits/,$(BITS_HDRS))
 SPECS			:= $(addprefix $(SPEC_DIR)/,$(addsuffix .spec,$(CATEGORIES)))
 
 # Every C file of the project, for the tooling (tidy, format, headers).
