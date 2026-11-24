@@ -9,8 +9,8 @@
 /**
  * @file errno_t.h
  * @brief Cases of errno_t (Annex K), for every header that defines it.
- * @Created: 2026/11/24 07:37:21 by Moutig
- * @Updated: 2026/11/24 07:37:21 by Moutig
+ * @Created: 2026/11/24 12:11:56 by Moutig
+ * @Updated: 2026/11/24 12:12:10 by Moutig
  *
  * Annex K: errno_t "which is type int" (K.3.2 <errno.h>; K.3.5 <stdio.h>,
  * K.3.6 <stdlib.h>, K.3.7 <string.h>, K.3.8 <time.h>, K.3.9 <wchar.h>),

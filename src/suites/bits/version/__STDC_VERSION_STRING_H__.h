@@ -9,8 +9,8 @@
 /**
  * @file __STDC_VERSION_STRING_H__.h
  * @brief Cases of the __STDC_VERSION_STRING_H__ macro of <string.h>.
- * @Created: 2026/11/24 07:37:21 by Moutig
- * @Updated: 2026/11/24 07:37:21 by Moutig
+ * @Created: 2026/11/24 12:09:32 by Moutig
+ * @Updated: 2026/11/24 12:09:45 by Moutig
  *
  * C23 7.26.1p2: <string.h> defines __STDC_VERSION_STRING_H__, an integer constant expression
  * with a value equivalent to 202311L.

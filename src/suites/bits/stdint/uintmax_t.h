@@ -9,8 +9,8 @@
 /**
  * @file uintmax_t.h
  * @brief Cases of uintmax_t, for every header that defines it.
- * @Created: 2026/11/24 07:37:21 by Moutig
- * @Updated: 2026/11/24 07:37:21 by Moutig
+ * @Created: 2026/11/24 12:11:11 by Moutig
+ * @Updated: 2026/11/24 12:11:18 by Moutig
  *
  * uintmax_t "designates an unsigned integer type capable of representing
  * any value of any unsigned integer type", at least 64 bits (C99

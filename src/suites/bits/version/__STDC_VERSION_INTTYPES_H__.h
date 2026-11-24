@@ -9,8 +9,8 @@
 /**
  * @file __STDC_VERSION_INTTYPES_H__.h
  * @brief Cases of the __STDC_VERSION_INTTYPES_H__ macro of <inttypes.h>.
- * @Created: 2026/11/24 07:37:21 by Moutig
- * @Updated: 2026/11/24 07:37:21 by Moutig
+ * @Created: 2026/11/24 12:09:53 by Moutig
+ * @Updated: 2026/11/24 12:09:59 by Moutig
  *
  * C23 7.8p2: <inttypes.h> defines __STDC_VERSION_INTTYPES_H__, an integer constant expression
  * with a value equivalent to 202311L.

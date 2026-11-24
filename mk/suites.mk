@@ -15,6 +15,7 @@
 
 CATEGORIES := \
 	ctype \
+	inttypes \
 	string \
 	strings \
 
@@ -24,6 +25,12 @@ BITS_HDRS := \
 	annex_k/errno_t.h \
 	annex_k/lib_ext1.h \
 	annex_k/rsize_t.h \
+	inttypes/convert.h \
+	inttypes/format.h \
+	inttypes/imaxdiv_t.h \
+	inttypes/pri.h \
+	inttypes/scn.h \
+	inttypes/wide.h \
 	locale/locale_t.h \
 	locale/locale_t_same.h \
 	stddef/NULL.h \
@@ -73,6 +80,20 @@ ctype_UNITS := \
 
 ctype_HDRS := \
 	ctype_cases.h \
+
+# ----- inttypes -----
+
+inttypes_UNITS := \
+	defs \
+	func/imaxabs \
+	func/imaxdiv \
+	func/strtoimax \
+	func/strtoumax \
+	func/wcstoimax \
+	func/wcstoumax \
+
+inttypes_HDRS := \
+	inttypes_cases.h \
 
 # ----- string -----
 

@@ -9,8 +9,8 @@
 /**
  * @file wchar_t.h
  * @brief Cases of wchar_t, for every header that defines it.
- * @Created: 2026/11/24 07:37:21 by Moutig
- * @Updated: 2026/11/24 07:37:21 by Moutig
+ * @Created: 2026/11/24 12:10:13 by Moutig
+ * @Updated: 2026/11/24 12:10:21 by Moutig
  *
  * wchar_t is an integer type whose range can represent distinct codes for
  * all members of the largest extended character set; the null character

@@ -9,8 +9,8 @@
 /**
  * @file intmax_t.h
  * @brief Cases of intmax_t, for every header that defines it.
- * @Created: 2026/11/24 07:37:21 by Moutig
- * @Updated: 2026/11/24 07:37:21 by Moutig
+ * @Created: 2026/11/24 12:10:55 by Moutig
+ * @Updated: 2026/11/24 12:11:05 by Moutig
  *
  * intmax_t "designates a signed integer type capable of representing any
  * value of any signed integer type", at least 64 bits (C99 7.18.1.5,

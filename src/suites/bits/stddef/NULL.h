@@ -9,8 +9,8 @@
 /**
  * @file NULL.h
  * @brief Cases of NULL, for every header that defines it.
- * @Created: 2026/11/24 07:37:21 by Moutig
- * @Updated: 2026/11/24 07:37:21 by Moutig
+ * @Created: 2026/11/24 12:10:42 by Moutig
+ * @Updated: 2026/11/24 12:10:48 by Moutig
  *
  * NULL "expands to an implementation-defined null pointer constant" (C99
  * 7.17, C11 / C17 7.19, C23 7.21): <stddef.h>, <string.h>, <stdio.h>,

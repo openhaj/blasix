@@ -9,8 +9,8 @@
 /**
  * @file lib_ext1.h
  * @brief __STDC_LIB_EXT1__ cases, ending every Annex K function unit.
- * @Created: 2026/11/24 07:37:21 by Moutig
- * @Updated: 2026/11/24 07:37:21 by Moutig
+ * @Created: 2026/11/24 12:12:15 by Moutig
+ * @Updated: 2026/11/24 12:12:23 by Moutig
  *
  * An implementation that provides Annex K defines __STDC_LIB_EXT1__ (C11
  * 6.10.8.3, K.2p2) with the value of the edition: 201112L (C11; the N1548
