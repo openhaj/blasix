@@ -14,6 +14,10 @@
 
 header ctype.h
 
+# Reserved: ISO C 7.26.2 (C99), 7.31.2 (C11, C17), 7.33.2 (C23); XSH 2.2.2.
+reserved C99           is[a-z]* to[a-z]*
+reserved POSIX.1-2001  *_t
+
 # name          since          tags
 isalnum         C99
 isalpha         C99
