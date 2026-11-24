@@ -1,9 +1,11 @@
+
 # clang-tidy configuration for blasix.
-#
-# Run with:
-#   make tidy   (lcrun and the framework)
-#
-# Or automatically through clangd (when --clang-tidy is passed).
+
+## Run with
+
+## make tidy   (lcrun and the framework)
+
+## Or automatically through clangd (when --clang-tidy is passed).
 
 Checks: >
   bugprone-*,
@@ -27,19 +29,25 @@ HeaderFilterRegex: '^(include|src)/.*\.h$'
 FormatStyle: file
 
 CheckOptions:
-  # Standard naming conventions.
-  - key: readability-identifier-naming.FunctionCase
+
+## Standard naming conventions.
+
+- key: readability-identifier-naming.FunctionCase
     value: lower_case
-  - key: readability-identifier-naming.VariableCase
+- key: readability-identifier-naming.VariableCase
     value: lower_case
-  - key: readability-identifier-naming.MacroDefinitionCase
+- key: readability-identifier-naming.MacroDefinitionCase
     value: UPPER_CASE
-  - key: readability-identifier-naming.TypedefCase
+- key: readability-identifier-naming.TypedefCase
     value: lower_case
-  - key: readability-identifier-naming.StructCase
+- key: readability-identifier-naming.StructCase
     value: lower_case
-  - key: readability-identifier-naming.EnumCase
+- key: readability-identifier-naming.EnumCase
     value: lower_case
-# We ignore identifiers starting with __, as they are reserved for the implementation.
-  - key: readability-identifier-naming.MacroDefinitionIgnoredRegexp
+
+## We ignore identifiers starting with __, as they are reserved for the implementation.
+
+- key: readability-identifier-naming.MacroDefinitionIgnoredRegexp
     value: '^__.*'
+- key: readability-braces-around-statements.ShortStatementLines
+    value: 2
