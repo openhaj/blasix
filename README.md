@@ -31,19 +31,26 @@ A run checks one libc against one target:
 | `STD` | `c99 c11 c17 c23 posix-2001 posix-2008 posix-2017 posix-2024` | `posix-2024` |
 | `OPTS` | option groups, comma list (`make options`): POSIX ones (`XSI`, `TSF`, ...) and ISO C features (`THREADS`, `COMPLEX`, `LIB_EXT1`, ...) | `XSI` on POSIX target, none on ISO C |
 | `EXT` | `1`: also the GNU / BSD extensions | `0` |
+| `LAX` | `1`: lax mode, do not check what the headers must hide (and expose everything the libc has, `LIBC_LAX_CFLAGS`) | `0` (strict) |
 
 The target sets the feature-test macros the tests are compiled with,
-which interfaces are required, and which tests run.
+which interfaces are required, which tests run, and (strict mode) which
+names the headers must not make visible.
 
 Other options: `TEST='glob'`, `V=1` (verbose), `Q=1` (quiet),
-`REPEAT=n` (flakiness), `TIMEOUT=s`, `JOBS=n`, `PROBE=0`.
+`REPEAT=n` (flakiness), `TIMEOUT=s`, `JOBS=n` (parallel jobs, for the
+build and the tests; default: the number of CPUs; `make -jN` sets the
+build jobs too), `PROBE=0`. On a terminal, the build and the run show a
+progress bar (units and probes built, tests done and failed so far).
 
 ## Results
 
 A run reports, for the chosen libc and target:
 
 - **probes**: whether each required interface is declared by the
-  header (`undeclared`) and defined by the library (`unlinked`);
+  header (`undeclared`) and defined by the library (`unlinked`), and
+  in strict mode whether a name the target forbids is visible anyway
+  (`leak`);
 - **tests**: each runs in its own process: `pass`, `fail`, `skip`,
   `crash`, `timeout`, `error`, or `unavailable` (did not build);
 - **conformance per header**: how many required interfaces are present
@@ -87,6 +94,7 @@ make compare A=host B=mylibc                 # what differs from the host libc
 | `LIBC_LDFLAGS` / `LIBC_LIBS` | link flags / libraries (after the objects) |
 | `LIBC_DEPS` | files whose change rebuilds the tests (e.g. `libc.a`) |
 | `libc-prepare` | recipe run before building (e.g. build the libc, or check it exists) |
+| `LIBC_LAX_CFLAGS` | optional, `LAX=1` only: macros that expose everything (e.g. `-D_DEFAULT_SOURCE`) |
 
 `mk/libc/host.mk` is a minimal example,
 `mk/libc/hajlibc.mk` builds the libc itself and supports coverage

@@ -9,6 +9,9 @@
 #   LIBC_LIBS        libraries, after the objects
 #   LIBC_DEPS        files the test binaries depend on (rebuild trigger)
 #   libc-prepare     recipe run before building (e.g. build the libc)
+#   LIBC_LAX_CFLAGS  (optional) lax mode only, LAX=1: macros that make the
+#                    headers expose everything they have, so that a function
+#                    a strict target hides is still tested
 #   LIBC_COV_SUPPORTED / LIBC_COV_PREPARE / LIBC_COV_REPORT (optional)
 
 LIBC_CC			:= $(HOST_CC)
@@ -19,6 +22,9 @@ LIBC_LDFLAGS	:=
 # libpthread; with musl both are in libc and the flags are harmless.
 LIBC_LIBS		:= -lpthread -lm
 LIBC_DEPS		:=
+# glibc and musl: _DEFAULT_SOURCE exposes POSIX.1-2024 additions such as
+# memmem, strlcpy, ffsl that they only show as extensions
+LIBC_LAX_CFLAGS	:= -D_DEFAULT_SOURCE
 
 libc-prepare:
 	@true

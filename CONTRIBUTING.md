@@ -9,7 +9,11 @@ it checks).
 
 ```tree
 spec/              interfaces per header, per edition and option group
-src/suites/        the tests: src/suites/<header>/<function>.c
+src/suites/        the tests: <header>/<group>/<function>.c (functions),
+                   <header>/defs.c (its types and constants),
+                   <header>/<header>_cases.h (cases of the category),
+                   bits/<origin>/<symbol>.h (cases of every type and
+                   constant: size_t, NULL, locale_t, PRId8, ...)
 src/framework/     test side: lc.c (checks, protocol, main),
                    sys.c (raw syscalls), cov.c (coverage, COV=1 only)
 src/runner/        lcrun (host libc): spec.c (editions, database, targets),
@@ -23,7 +27,8 @@ mk/                build modules: config.mk (layout), sources.mk and
                    build.mk (compile helpers), runner.mk, target.mk,
                    tests.mk, run.mk, tooling.mk
 mk/libc/           one profile per libc: host.mk, hajlibc.mk
-templates/         test.c (make new)
+templates/         test.c (a unit), defs.c (a header's definitions),
+                   spec.spec (a spec file, with its guide); make new uses them
 scripts/           new-test.sh, cov-report.sh, header*.sh
 ```
 
@@ -39,7 +44,54 @@ The target decides everything:
 - **which interfaces are required** (from `spec/`);
 - **which tests run**: units whose function the target does not require
   are not built; a test whose `.since` / `.until` / `.opt` excludes the
-  target is not run.
+  target is not run;
+- **what the headers must hide** (strict mode, the default): see
+  [Visibility: strict and lax](#visibility-strict-and-lax).
+
+### Visibility: strict and lax
+
+The standards also say what a header must **not** declare:
+
+- ISO C (4p6, 7.1.3): a strictly conforming program may use every name
+  that is not reserved, so a header may only add names reserved for it,
+  the "future library directions" (C99 7.26, C11 / C17 7.31, C23 7.33:
+  `str[a-z]*` in `<string.h>`, `is[a-z]*` in `<ctype.h>`, ...) and names
+  with a leading underscore;
+- POSIX (XSH 2.2.1): "Additional symbols not required or explicitly
+  permitted by POSIX.1 to be in that header shall not be made visible,
+  except when enabled by another feature test macro"; XSH 2.2.2 lists
+  what each header may add (prefixes, suffixes: `_t` in any header);
+- Annex K (K.3.1.1): with `__STDC_WANT_LIB_EXT1__` defined as 0 none of
+  its identifiers is declared (reserved or not), with 1 they all are,
+  undefined is implementation-defined (not checked).
+
+For each target, every interface of `spec/` is then (`make spec-list
+V=1`, column notes):
+
+| Visibility | When | Checked by |
+| --- | --- | --- |
+| required | the target requires it | the declaration probe (`ok` / `undeclared` / `unlinked`) |
+| may be visible | not required, name reserved for the header (`reserved` lines, leading `_`) | nothing |
+| must be hidden | not required, not reserved; Annex K with the want macro 0 | the hidden probe: `leak` if visible |
+| header not in target | no interface of the header is required (`<strings.h>` on an ISO C target) | nothing |
+
+A removed interface follows the same rule: `bcmp` (removed in
+POSIX.1-2008, no reserved prefix in `<strings.h>`) must be gone from
+2008 on, while `isascii` (removed in 2024) may stay: `is[a-z]*` is
+reserved for `<ctype.h>`.
+
+Hidden probes (`probe-src/<cat>/<name>.hidden.c`) include the header
+with the target's macros only (and `#define __STDC_WANT_LIB_EXT1__ 0`
+for Annex K); one that compiles is a **leak**: a `leak` column and a
+`leaked` list in the conformance table, `N leaked` on the last line,
+and a failing run.
+
+**Lax mode** (`LAX=1`, build directory `+lax`): visibility is not
+checked, and the units and declaration probes are also compiled with
+the profile's `LIBC_LAX_CFLAGS` (host: `-D_DEFAULT_SOURCE`). A function
+the libc only shows as an extension (glibc: `memmem`, `strlcpy`, `ffsl`
+under POSIX.1-2024) is then tested anyway. Strict mode is the
+conformance result; lax mode answers "does it work, once visible?".
 
 ### The 8 standards
 
@@ -76,7 +128,14 @@ C11) is required, obsolescent, by POSIX.1-2008 but gone from POSIX.1-2024.
 ## The spec database: `spec/<header>.spec`
 
 One file per header (`sys/stat.h` -> `spec/sys_stat.spec`), one line per
-interface and per ladder:
+interface and per ladder. **Start from `templates/spec.spec`** (`make
+new` copies it for a new category): its `#:` lines are the guide (what
+to read in `data/`, what to write, in which order), removed in the copy;
+its `#` lines are the skeleton every spec follows: the summary per
+edition, the host deviations, the `header` line, the `reserved` lines
+with their clauses, then the interfaces grouped as the header's page
+groups them. A spec file holds data and its citations, not the format:
+the format is described here.
 
 ```C
 header string.h
@@ -93,6 +152,10 @@ strtok_r      POSIX.1-2001   TSF base=POSIX.1-2008
 strlcpy       POSIX.1-2024
 strcpy_s      C11            LIB_EXT1
 memrchr       EXT            ext=GNU
+
+# what the header may declare beyond the target (ISO C 7.31.13, XSH 2.2.2)
+reserved C99           str[a-z]* mem[a-z]* wcs[a-z]*
+reserved POSIX.1-2001  *_t
 ```
 
 - `since`: the edition that introduced it (`C99` ... `C23`,
@@ -111,6 +174,14 @@ memrchr       EXT            ext=GNU
   option group to the base in V), `ob=V[,W]` (obsolescent from V, or W:
   `asctime` is `ob=POSIX.1-2008,C23`), `removed=V[,W]`, `ext=NAME`
   (extension family), `same=H[,H2]` (other headers that declare it too).
+- **Reserved names**: `reserved V pattern...` (fnmatch patterns), from
+  edition V on: copy them from the future library directions of the
+  header (C99 7.26, C11 / C17 7.31, C23 7.33; a header that includes
+  another one, like `<inttypes.h>` and `<stdint.h>`, gets both) and from
+  the XSH 2.2.2 table (POSIX prefixes and suffixes; `*_t` for every
+  header), with their edition (`reserved C23 PRIB* SCNB*`). Leading
+  underscores are built in. Without the right lines, interfaces of other
+  editions are wrongly reported as leaks (or not checked).
 - **Shared definitions**: when the standard says a header defines
   something "as described in" another header (`locale_t` in `<ctype.h>`,
   as in `<locale.h>`), tag it `same=locale.h`: its probe includes both
@@ -143,6 +214,26 @@ For every required interface, a tiny program is generated
 | `ok` | the header declares it and the library defines it |
 | `undeclared` | the header does not declare it under the target's macros (a macro: not `#define`d; a type: unknown) |
 | `unlinked` | declared, but the library does not define it |
+| `leaked` / `hidden` | hidden probe (strict mode): an interface the target forbids is visible / is not |
+| `accepted` / `rejected` | reject probe: a translation unit the standard requires the implementation to refuse compiled / was refused |
+
+**Reject probes** check a "shall issue a diagnostic" of the standard: a
+generated translation unit must fail to compile. They are generated by
+lcrun from the spec, wherever they apply, in strict and lax mode:
+
+- K.3.1.1p4: `__STDC_WANT_LIB_EXT1__` must be defined identically for
+  all inclusions of Annex K headers, "as if a preprocessor error
+  directive were used" otherwise. For every header with interfaces of
+  an option that has a want macro (`LIB_EXT1`), when that option is
+  selected, two probes (`__want_LIB_EXT1_1_0`, `__want_LIB_EXT1_0_1`)
+  include the header twice with the macro changed in between. A new
+  Annex K header (`<stdio.h>`, `<stdlib.h>`, ...) gets them as soon as
+  its `LIB_EXT1` lines are in its spec.
+
+A new kind of required diagnostic goes in `specRejects()` (spec.c: the
+list) and `writeReject()` (tools.c: the source); the make rule, the
+report (`nodiag` column, `accepted` list) and the TSV / JSON rows
+(`@reject:<id>`) are generic.
 
 Functions are probed as `(name)`, which also catches a function-like
 macro without the real function behind it. Interfaces that ISO C defines
@@ -164,7 +255,9 @@ against this libc).
    crash, timeout, error, skip, checks, CPU time;
 4. **conformance per header** for the target: `req` (required; `opt`
    by an option group, `ob` obsolescent), `ok` / `undec` / `unlnk`
-   (probes), `tested`, `pass`, `fail`, `present` (ok / req) and
+   (probes), `leak` (strict mode: forbidden and visible), `nodiag`
+   (reject probes that compiled), `tested`,
+   `pass`, `fail`, `present` (ok / req) and
    `verified` (tested with every test passing / req), with the lists of
    undeclared, unlinked, failing and untested interfaces (`V=1`: in
    full);
@@ -172,28 +265,44 @@ against this libc).
 6. totals.
 
 Every run writes `results.tsv` (tests, plus one `@interface` row per
-required interface; used by `make compare`) and `results.json` (every
-field, the target, every interface with its requirement and probe).
+required interface, one `@hidden` row per hidden probe and one
+`@reject:<id>` row per reject probe; used by
+`make compare`) and `results.json` (every field, the target, the mode,
+every interface with its requirement and probe, every hidden probe).
 
 ## Writing tests
 
 ### One file per function
 
 ```sh
-src/suites/<header>/<function>.c        src/suites/string/strlen.c
+src/suites/<header>/<group>/<function>.c   src/suites/string/misc/strlen.c
 ```
 
 The directory is the spec file name (`string` for `spec/string.spec`,
-`<string.h>`); the function must have an entry there. Create a file
-with:
+`<string.h>`); the function must have an entry there. The **group** is a
+folder that sorts the units of a big header (`string`: `copy`, `concat`,
+`compare`, `search`, `misc`, `annex_k`; `inttypes`: `func`), at any
+depth: it is only a folder, the unit is still `<header>/<function>` for
+lcrun, the filters and the report. Use the groups of the header's page
+(its subclauses). One file per interface whatever the group (`make
+spec-check` reports a second one). Units are for **functions** (and
+function-like macros: `_tolower`); the types and constants of the header
+are in its `defs.c` (see below).
+The category's shared header stays at its root
+(`src/suites/string/string_cases.h`); units include it as
+`"string/string_cases.h"` (`-I src/suites`). Create a file with:
 
 ```sh
-make new CAT=string FUNC=strchr                 # entry already in spec/
-make new CAT=string FUNC=strchrnul SINCE=EXT    # also adds the entry
+make new CAT=string GROUP=search FUNC=strchr               # entry in spec/
+make new CAT=string GROUP=search FUNC=strchrnul SINCE=EXT  # adds the entry
+make new CAT=string FUNC=x                                 # lists the groups
+make new CAT=string FUNC=size_t                            # a type: says what
+                                                           # to add to defs.c
 ```
 
 The makefiles use no wildcard: every compiled file is listed. `make new`
-adds the unit to `<category>_UNITS` in `mk/suites.mk` (a new category
+adds the unit (`<group>/<function>`) to `<category>_UNITS` in
+`mk/suites.mk` (a new category
 also gets its entry in `CATEGORIES`); a helper shared by the units goes
 in `<category>_HDRS` by hand, a runner or framework file in
 `mk/sources.mk`. A unit that is not listed is not built: `make
@@ -227,7 +336,8 @@ Rules:
   standard sets it).
 - **Depend only on the function under test.** Prepare data and clean up
   with the framework helpers (`lc_fill`, `lc_unlink`, `lc_tmpPath`,
-  `lc_exitNow`), not with other libc functions: a missing `remove()`
+  `lc_exitNow`, `lc_guarded`: bytes followed by an inaccessible page,
+  for "never examines more than n bytes"), not with other libc functions: a missing `remove()`
   must not make the `fopen` tests unavailable.
 - **Mind the edition.** A behaviour that only exists from some edition
   on gets `.since` (the `x` mode of `fopen`: `.since = "C11"`); a POSIX
@@ -266,6 +376,90 @@ relations between classes, and generators (`CT_CLASSIFIER_TESTS`,
 function and class. Functions of other headers needed by a case
 (`setlocale`, `newlocale`) are referenced weakly there, so a libc without
 them still builds the units and those cases skip.
+
+### Types and constants: `bits/` and `<header>/defs.c`
+
+Every **type** and every **constant** (object-like macro) of a header is
+tested by one unit per header, `src/suites/<header>/defs.c`, from cases
+written once in `src/suites/bits/`, sorted by origin:
+
+```tree
+bits/stddef/    size_t.h NULL.h wchar_t.h       ("as described in <stddef.h>")
+bits/stdint/    intmax_t.h uintmax_t.h
+bits/locale/    locale_t.h, locale_t_same.h (includes <locale.h>)
+bits/annex_k/   errno_t.h rsize_t.h, lib_ext1.h (generator of the *_s units)
+bits/version/   __STDC_VERSION_STRING_H__.h, __STDC_VERSION_INTTYPES_H__.h
+bits/inttypes/  imaxdiv_t.h, convert.h, wide.h, format.h (generators),
+                pri.h scn.h (one block per PRI / SCN macro)
+```
+
+A `bits/` file is not a generator: including it instantiates its cases,
+each block guarded by the symbol's requirement and reported under the
+symbol (`TEST_SYM`):
+
+```c
+# if defined(LC_REQ_size_t) || defined(LC_DEFS_ALL)
+TEST_SYM(size_t__unsigned, "size_t", is_unsigned, .ref = "C11 7.19p2")
+{
+	EXPECT_TRUE((size_t)-1 > 0);
+}
+# endif
+```
+
+`defs.c` includes the header, then the `bits/` files of its symbols, then
+what only that header says, then the `bits/` files that include other
+headers (`templates/defs.c`):
+
+```c
+#include "framework/lc.h"
+#include <string.h>                 /* the header under test, nothing else */
+
+#include "bits/stddef/size_t.h"
+#include "bits/stddef/NULL.h"
+#include "bits/locale/locale_t.h"
+
+# if defined(LC_REQ_size_t) || defined(LC_DEFS_ALL)
+TEST_SYM(size_t__string_lengths, "size_t", is_the_type_of_string_lengths,
+	.ref = "C11 7.24.6.3p1")
+{
+	EXPECT_TYPE(strlen(""), size_t);
+}
+# endif
+
+#include "bits/locale/locale_t_same.h"  /* last: includes <locale.h> */
+```
+
+How it is built and checked:
+
+- lcrun gives make `LC_DEFS_<cat>`, the types and macros the target
+  requires; the defs unit gets `-DLC_REQ_<name>` for those whose probe
+  says the header declares them (all with `PROBE=0`). A missing symbol is
+  reported `undeclared` by its probe and leaves the others running;
+  `LC_DEFS_ALL` (`.clangd`) compiles every block in the editor;
+- `FUNC=size_t` runs the defs units with only the cases of `size_t`;
+- `make spec-check` fails when a type or constant of the spec has no
+  `LC_REQ_<name>` in its `defs.c` (directly or in a `bits/` file it
+  includes), when a type has a unit of its own, or when a `bits/` file
+  marked `BITS_INCLUDES_OTHER_HEADERS` comes before an unmarked one;
+- a macro with a unit of its own (`ctype/xsi/_tolower.c`) is a
+  function-like macro: tested like a function. `make new` without `GROUP`
+  sends a type or a macro to `defs.c` (created from `templates/defs.c`)
+  and says which `bits/` file to include or write.
+
+Rules:
+
+- `defs.c` includes **only** the header under test before the cases:
+  another header could make the symbol visible and the case would pass
+  for a header that lacks it. A check against another header (`same=` in
+  the spec, "as described in") is a `bits/` file of its own, marked
+  `BITS_INCLUDES_OTHER_HEADERS`, included last; the `same=` probe checks
+  compatibility at compile time too;
+- a `bits/` file uses only its symbol (`size_t`, not `SIZE_MAX`), which
+  every header that defines it provides; what needs more of the header
+  (`INTMAX_MAX` in `<inttypes.h>`) goes in that header's `defs.c`;
+- a new symbol: add `bits/<origin>/<symbol>.h` (listed in `BITS_HDRS`,
+  `mk/suites.mk`), and include it from the `defs.c` of **every** header
+  that defines it, the ones already done included.
 
 ### Checks
 
@@ -338,7 +532,9 @@ another libc, so it is not used (`src/framework/cov.c`). Needs GCC ≥ 12 and
 Write `mk/libc/<name>.mk` (contract in `host.mk`): `LIBC_CC`,
 `LIBC_CPPFLAGS`, `LIBC_CFLAGS` (no `-std`, no feature macros: the target
 sets them), `LIBC_LDFLAGS`, `LIBC_LIBS`, `LIBC_DEPS`, a `libc-prepare`
-recipe, optionally the `LIBC_COV_*` hooks. Add `<name>` to `LIBC_PROFILES`
+recipe, optionally `LIBC_LAX_CFLAGS` (lax mode: the macros that make its
+headers expose everything, e.g. `-D_DEFAULT_SOURCE`) and the `LIBC_COV_*`
+hooks. Add `<name>` to `LIBC_PROFILES`
 in `mk/config.mk`, then `make run LIBC=<name>`.
 
 ### Adding an edition

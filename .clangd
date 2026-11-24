@@ -35,21 +35,41 @@ If:
   PathMatch: src/suites/.*\.[ch]
 CompileFlags:
   Add:
+    # units include "<cat>/<cat>_cases.h" and "bits/<symbol>.h"
+    - -Isrc/suites
     - -DLC_CATEGORY="suite"
     - -DLC_FUNCTION="suite"
     - -fno-builtin
-    # The widest target (C23 + POSIX.1-2024 + XSI), so that the host
-    # headers declare every interface. Editor only: make never reads this
-    # file, a unit is built with the flags of the target (spec.mk).
+    # Editor only (make never reads this file: a unit is built with the
+    # flags of its target, spec.mk): make the host headers declare
+    # everything they know, every edition and extension at once.
     # Comes after the -std=c11 above: the last -std wins.
-    - -std=c23
-    - -D_POSIX_C_SOURCE=202405L
-    - -D_XOPEN_SOURCE=800
-# What the host headers still do not declare (interfaces removed from
-# the host, or that only the libc under test has). The build still
-# catches a real mistake: the unit is unavailable, with its .err file.
+    - -std=gnu23
+    - -D_GNU_SOURCE
+    - -D__STDC_WANT_LIB_EXT1__=1
+    # No typo correction: an undeclared name (Annex K memcpy_s, absent
+    # from glibc) stays "undeclared" (suppressed below) instead of being
+    # read as memcpy, with cascading "too many arguments" errors.
+    - -fno-spell-checking
+    # Suppressed errors still count toward the limit (20 by default).
+    - -ferror-limit=0
+
+# What the host headers still do not declare (Annex K, interfaces that
+# only the libc under test has). The build still catches a real
+# mistake: the unit is unavailable, with its .err file.
 Diagnostics:
   Suppress:
     - ext_implicit_function_decl_c99   # Call to undeclared function 'x'
     - err_unknown_typename             # Unknown type name 'x'
     - err_undeclared_var_use           # Use of undeclared identifier 'x'
+    - err_undeclared_var_use_suggest   # ... did you mean 'y'?
+    - err_unknown_typename_suggest     # Unknown type name 'x'; did you mean 'y'?
+
+---
+# <cat>/defs.c: every case of bits/ compiled (the build only compiles
+# those of the symbols the target requires, -DLC_REQ_<name>).
+If:
+  PathMatch: src/suites/(.*/defs\.c|bits/.*\.h)
+CompileFlags:
+  Add:
+    - -DLC_DEFS_ALL

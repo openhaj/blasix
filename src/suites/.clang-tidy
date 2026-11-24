@@ -1,0 +1,13 @@
+# clang-tidy configuration for the test units (src/suites/).
+#
+# Same checks as the root .clang-tidy, plus: a call whose result a test
+# discards on purpose (POSIX.1-2024 errno cases, macro and function
+# forms) is written (void)f(...), and that cast is enough to silence
+# bugprone-unused-return-value. lcrun and the framework keep the
+# stricter default.
+
+InheritParentConfig: true
+
+CheckOptions:
+  - key: bugprone-unused-return-value.AllowCastToVoid
+    value: true
