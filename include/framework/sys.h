@@ -10,7 +10,7 @@
  * @file sys.h
  * @brief Raw Linux syscalls used by the framework (x86_64, aarch64).
  * @Created: 2026/11/23 04:18:40 by Moutig
- * @Updated: 2026/11/24 10:30:00 by Moutig
+ * @Updated: 2026/11/24 05:13:17 by Moutig
  *
  * The framework must not depend on the libc under test: these are the
  * only "system" functions it uses. They return what the kernel returns
@@ -92,6 +92,16 @@ long	lc_sysClose(int fd);
  * @return Start of the mapping, or NULL on failure.
  */
 void	*lc_sysMmap(unsigned long len);
+
+/**
+ * @brief mprotect(2).
+ *
+ * @param addr Start of the range (page aligned).
+ * @param len  Size in bytes.
+ * @param prot PROT_* bits (0: no access).
+ * @return 0, or -errno.
+ */
+long	lc_sysMprotect(void *addr, unsigned long len, int prot);
 
 /**
  * @brief unlink(2), through unlinkat(AT_FDCWD, ...).

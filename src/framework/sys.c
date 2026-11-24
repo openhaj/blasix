@@ -10,7 +10,7 @@
  * @file sys.c
  * @brief Raw Linux syscalls for the framework.
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/24 10:30:00 by Moutig
+ * @Updated: 2026/11/24 05:12:58 by Moutig
  *
  * Every system call of the framework goes through lc_syscall3 /
  * lc_syscall6, a few lines of inline asm per architecture, so that the
@@ -45,6 +45,7 @@
 # define LC_NR_MKDIRAT		258
 # define LC_NR_CLOSE		3
 # define LC_NR_MMAP			9
+# define LC_NR_MPROTECT		10
 # define LC_NR_UNLINKAT		263
 
 /**
@@ -112,6 +113,7 @@ static long	lc_syscall6(long nr, long a, long b, long c, long d, long e, long f)
 # define LC_NR_MKDIRAT		34
 # define LC_NR_CLOSE		57
 # define LC_NR_MMAP			222
+# define LC_NR_MPROTECT		226
 # define LC_NR_UNLINKAT		35
 
 /**
@@ -222,6 +224,11 @@ void	*lc_sysMmap(unsigned long len)
 	if (r < 0 && r > -4096)
 		return (0);
 	return ((void *)r);
+}
+
+long	lc_sysMprotect(void *addr, unsigned long len, int prot)
+{
+	return (lc_syscall3(LC_NR_MPROTECT, (long)addr, (long)len, prot));
 }
 
 long	lc_sysUnlink(const char *path)

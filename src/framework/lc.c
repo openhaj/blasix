@@ -10,7 +10,7 @@
  * @file lc.c
  * @brief Test-side engine: checks, output protocol, main().
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/24 00:39:49 by Moutig
+ * @Updated: 2026/11/24 05:12:43 by Moutig
  *
  * Linked into every test binary, compiled against the libc under
  * test but calling none of its functions (see sys.c).
@@ -265,6 +265,24 @@ void	lc_fill(void *p, int c, lc_size_t n)
 
 	while (n--)
 		*d++ = (unsigned char)c;
+}
+
+/*
+ * 64 KiB: a multiple of every page size Linux uses (4, 16, 64 KiB), so
+ * the guard is page aligned without asking the kernel for the size.
+ */
+#define LC_GUARD	65536UL
+
+void	*lc_guarded(lc_size_t n)
+{
+	unsigned long	len;
+	unsigned char	*base;
+
+	len = (n + LC_GUARD - 1) / LC_GUARD * LC_GUARD;
+	base = lc_sysMmap(len + LC_GUARD);
+	if (!base || lc_sysMprotect(base + len, LC_GUARD, 0) != 0)
+		return (0);
+	return (base + len - n);
 }
 
 int	lc_unlink(const char *path)

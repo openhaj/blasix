@@ -10,7 +10,7 @@
  * @file lc.h
  * @brief Test-side API: TEST, EXPECT_*, ASSERT_*, helpers.
  * @Created: 2026/11/23 04:44:31 by Moutig
- * @Updated: 2026/11/24 03:17:23 by Moutig
+ * @Updated: 2026/11/24 05:13:13 by Moutig
  *
  * One test file = one function of the libc under test:
  *
@@ -161,6 +161,18 @@ struct lc_test
 
 /** Test case attached to another function (e.g. getc_unlocked in getc.c). */
 # define TEST_FN(func, name)		LC_DEFINE(func##__##name, #func, #name, .timeout = 0)
+
+/**
+ * Test case of a symbol (type, constant), with options: the cases of
+ * src/suites/bits/, instantiated by a <category>/defs.c. The result is
+ * reported under the symbol, not under "defs".
+ *
+ *   id   unique identifier (symbol and name pasted: size_t__is_unsigned)
+ *   sym  the symbol, a string ("size_t"; #M in a generator, so that a
+ *        macro such as PRId8 is not expanded)
+ *   name the case
+ */
+# define TEST_SYM(id, sym, name, ...)	LC_DEFINE(id, sym, #name, __VA_ARGS__)
 
 /* ----- Checks (implemented in lc.c) ----- */
 
@@ -382,14 +394,20 @@ void	lc_log(const char *msg);
 
 /*
  * Types: is the type of an expression compatible with a type? Checked at
- * run time (reported like any check, the unit still builds). Uses
- * __typeof__ and __builtin_types_compatible_p (GCC, clang).
+ * run time (reported like any check, the unit still builds).
  *
  *     EXPECT_TYPE(&isalpha, int (*)(int));
+ *
+ * Through _Generic (C11; accepted as an extension in C99 mode by GCC and
+ * clang), not __builtin_types_compatible_p: GCC records the const and
+ * noreturn attributes in the function type, so a pointer to
+ * `int ffs(int) __attribute__((const))` would not match int (*)(int).
+ * _Generic converts the expression as an rvalue first (arrays decay,
+ * top-level qualifiers drop): compare with the unqualified type.
  */
 
 /** Is the type of @p expr compatible with @p type? (1 or 0, constant) */
-# define LC_TYPE_IS(expr, type)	__builtin_types_compatible_p(__typeof__(expr), type)
+# define LC_TYPE_IS(expr, type)	(__extension__ _Generic((expr), type: 1, default: 0))
 
 # define EXPECT_TYPE(expr, type)	LC_BOOL(EXPECT, "TYPE", 1, LC_TYPE_IS(expr, type))
 # define ASSERT_TYPE(expr, type)	LC_BOOL(ASSERT, "TYPE", 1, LC_TYPE_IS(expr, type))
@@ -443,6 +461,20 @@ lc_size_t	lc_strlen(const char *s);
  * @param n Number of bytes.
  */
 void	lc_fill(void *p, int c, lc_size_t n);
+
+/**
+ * @brief Memory that ends right before an inaccessible page.
+ *
+ * Returns @p n writable bytes followed by a page with no access: a
+ * function that reads (or writes) one byte past them crashes the test.
+ * For the "shall not examine more than n bytes" requirements (strnlen,
+ * memchr, strndup, ...). The bytes are not initialized (zero) and the
+ * memory is never released (one process per test).
+ *
+ * @param n Number of usable bytes (may be 0).
+ * @return Start of the @p n bytes, or NULL if the mapping failed.
+ */
+void	*lc_guarded(lc_size_t n);
 
 /**
  * @brief Remove a file (cleanup), without the libc under test.
