@@ -251,6 +251,20 @@ needs), `unavailable` (the unit did not build against this libc). The
 first four are failures; `skip` and `unimplemented` did not run and count
 neither as passed nor as failed.
 
+Results that come from the spec and the probes, not from a unit, are
+added once the tests ran (`src/runner/run/virtual.c`), so that the
+tables, the totals and the exit status show them like any test:
+
+| Result | Status |
+| --- | --- |
+| `<cat>/<name>/@not_in_target` | `skip`: the target does not require it, with why (removed in POSIX.1-2008, not yet, option off, extension) and whether it must be hidden |
+| `<cat>/<name>/@hidden` | strict mode, an interface that must be hidden: `pass` when the header hides it, `fail` when it is visible anyway (a leak, with the rule) |
+| `<cat>/<want>/@reject_<a>_<b>` | a reject probe: `pass` when refused, `fail` when it compiled |
+
+Only for the headers of the target; `-c`, `-f`, `-t` filter them too. The
+summary line says how many interfaces the target leaves out and how many
+of the failures are leaks or missing diagnostics.
+
 Each required interface then gets one verdict, the first that applies:
 
 | Verdict | When |

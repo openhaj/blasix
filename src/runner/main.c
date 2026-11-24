@@ -10,7 +10,7 @@
  * @file main.c
  * @brief lcrun: entry point, one command per invocation.
  * @Created: 2026/11/24 08:25:41 by Moutig
- * @Updated: 2026/11/24 08:49:58 by Moutig
+ * @Updated: 2026/11/24 11:55:26 by Moutig
  *
  * Parses the command line (cli.c), loads the spec database (spec/), then
  * runs the command: a spec tool (tools/), or a run: discover the units
@@ -91,6 +91,7 @@ int	main(int argc, char **argv)
 	r.wallMs = nowMs();
 	runAll(&r);
 	r.wallMs = nowMs() - r.wallMs;
+	addVirtualResults(&r);
 	reportConsole(&r);
 	if (r.o.tsvOut && reportTsv(&r, r.o.tsvOut) < 0)
 		perror(r.o.tsvOut);
@@ -103,12 +104,6 @@ int	main(int argc, char **argv)
 	for (size_t i = 0; i < r.nTests; i++)
 		if (statusFailed(r.tests[i].st))
 			bad = 1;
-	for (size_t i = 0; i < r.spec.n; i++)
-		if (r.hidden[i] == HID_LEAKED && inList(r.o.cats, r.spec.v[i].cat)
-			&& inList(r.o.funcs, r.spec.v[i].name))
-			bad = 1;
-	for (size_t i = 0; i < r.nRejects; i++)
-		if (r.rejects[i].st == REJ_ACCEPTED && inList(r.o.cats, r.rejects[i].cat))
-			bad = 1;
+	/* leaks and missing diagnostics are failed results (addVirtualResults) */
 	return (bad);
 }

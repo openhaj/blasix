@@ -10,7 +10,7 @@
  * @file run.h
  * @brief A run: units, tests, results, and how they are found and run (run/).
  * @Created: 2026/11/24 08:28:05 by Moutig
- * @Updated: 2026/11/24 10:25:14 by Moutig
+ * @Updated: 2026/11/24 11:53:26 by Moutig
  *
  * run/discover.c  sources of the suites, units of the target, their
  *                 tests, probe results;
@@ -223,6 +223,19 @@ void		suitesFree(t_src *v, long n);
  * @param r Run.
  */
 void		runAll(t_run *r);
+
+/**
+ * @brief Add the results that come from the spec and the probes, once
+ *        the tests ran (run/virtual.c): @not_in_target (SKIP, with why)
+ *        for each interface of the target's headers the target does not
+ *        require; @hidden (strict mode: PASS, or FAIL for a leak) for each
+ *        one that must be hidden; @reject_<a>_<b> (PASS, or FAIL when the
+ *        translation unit compiled) for each reject probe. They count in
+ *        the report, the totals, the exit status and the TSV / JSON.
+ *
+ * @param r Run, after runAll() and readProbes().
+ */
+void		addVirtualResults(t_run *r);
 
 
 /* ----- Shared between the files of the module ----- */

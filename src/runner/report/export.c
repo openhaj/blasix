@@ -10,9 +10,10 @@
  * @file export.c
  * @brief Results of a run as TSV and JSON.
  * @Created: 2026/11/24 08:14:32 by Moutig
- * @Updated: 2026/11/24 10:29:41 by Moutig
+ * @Updated: 2026/11/24 11:55:19 by Moutig
  *
- * TSV: one row per test, plus @interface, @hidden and @reject:<id> rows
+ * TSV: one row per test (the @not_in_target, @hidden and @reject_* results
+ * included), plus one @interface row per required interface
  * (read back by --compare). JSON: every field, the target, the mode, every
  * unit that did not build (with why and its log), every required
  * interface with its probe, tests and verdict, the conformance counters of
@@ -68,18 +69,6 @@ int	reportTsv(const t_run *r, const char *path)
 		fprintf(fp, "%s\t%s\t@interface\t%s\t0\t0\t0\t0\t0\t0\t0\n",
 			r->spec.v[i].cat, r->spec.v[i].name, probeName(r->probes[i]));
 	}
-	/* one row per hidden probe (strict mode): test "@hidden" */
-	for (size_t i = 0; i < r->spec.n; i++)
-		if (r->hidden[i] != HID_UNKNOWN)
-			fprintf(fp, "%s\t%s\t@hidden\t%s\t0\t0\t0\t0\t0\t0\t0\n",
-				r->spec.v[i].cat, r->spec.v[i].name,
-				r->hidden[i] == HID_LEAKED ? "leaked" : "hidden");
-	/* one row per reject probe: test "@reject:<id>" */
-	for (size_t i = 0; i < r->nRejects; i++)
-		if (r->rejects[i].st != REJ_UNKNOWN)
-			fprintf(fp, "%s\t-\t@reject:%s\t%s\t0\t0\t0\t0\t0\t0\t0\n",
-				r->rejects[i].cat, r->rejects[i].id,
-				r->rejects[i].st == REJ_ACCEPTED ? "accepted" : "rejected");
 	return (fclose(fp));
 }
 

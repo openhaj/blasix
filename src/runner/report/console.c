@@ -10,7 +10,7 @@
  * @file console.c
  * @brief Console report of a run.
  * @Created: 2026/11/24 08:14:20 by Moutig
- * @Updated: 2026/11/24 10:28:49 by Moutig
+ * @Updated: 2026/11/24 11:55:16 by Moutig
  *
  * Failures, units that did not build, results per category (per
  * function with -v), conformance (report/conformance.c), slowest tests,
@@ -381,6 +381,49 @@ static void	sectionExtremes(const t_run *r)
 	}
 }
 
+/**
+ * @brief Results of run/virtual.c named @p prefix... with status @p st.
+ *
+ * @param r      Run.
+ * @param prefix "@hidden", "@reject_", "@not_in_target".
+ * @param st     Status.
+ * @return Count.
+ */
+static int	countResults(const t_run *r, const char *prefix, t_status st)
+{
+	int	n = 0;
+
+	for (size_t i = 0; i < r->nTests; i++)
+		n += (r->tests[i].st == st && !strncmp(r->tests[i].name, prefix, strlen(prefix)));
+	return (n);
+}
+
+/**
+ * @brief What the target leaves out, one line: interfaces skipped
+ *        (@not_in_target), hidden as required (@hidden), test cases whose
+ *        .since / .until / .opt exclude the target.
+ *
+ * @param r Run.
+ */
+static void	sectionOutOfTarget(const t_run *r)
+{
+	int	skipped = countResults(r, "@not_in_target", ST_SKIP);
+	int	hidden = countResults(r, "@hidden", ST_PASS);
+	int	leaked = countResults(r, "@hidden", ST_FAIL);
+
+	if (skipped == 0 && r->nOutOfTarget == 0)
+		return ;
+	printf("%snot in this target: %d interface%s skipped (@not_in_target)", C_DIM, skipped,
+		skipped == 1 ? "" : "s");
+	if (hidden + leaked)
+		printf(", %d of them must be hidden: %d hidden, %s%d leaked%s%s", hidden + leaked,
+			hidden, leaked ? C_RED : "", leaked, C_RESET, C_DIM);
+	if (r->nOutOfTarget)
+		printf("; %zu test case%s excluded by .since / .until / .opt", r->nOutOfTarget,
+			r->nOutOfTarget == 1 ? "" : "s");
+	printf("%s\n", C_RESET);
+}
+
 void	reportConsole(const t_run *r)
 {
 	int		n[ST_COUNT] = {0};
@@ -420,9 +463,7 @@ void	reportConsole(const t_run *r)
 		printf("\n%slibc %s%s against %s: %d/%zu units built, %zu tests, "
 			"%ld checks, %.2f s wall, %d jobs\n", C_BOLD, r->o.libc, C_RESET,
 			target, units, r->nUnits, r->nTests, checks, r->wallMs / 1e3, r->o.jobs);
-		if (r->nUnitsOutOfTarget || r->nOutOfTarget)
-			printf("%s%zu units and %zu tests not in this target%s\n", C_DIM,
-				r->nUnitsOutOfTarget, r->nOutOfTarget, C_RESET);
+		sectionOutOfTarget(r);
 	}
 	if (ran && n[ST_PASS] == ran)
 		printf("%s%sALL %d TESTS PASSED%s", C_BOLD, C_GREEN, ran, C_RESET);
@@ -435,21 +476,14 @@ void	reportConsole(const t_run *r)
 	if (units < (int)r->nUnits)
 		printf("  %s%zu unavailable%s", C_DIM, r->nUnits - (size_t)units, C_RESET);
 	{
-		size_t	leaks = 0;
+		int	leaks = countResults(r, "@hidden", ST_FAIL);
+		int	nodiag = countResults(r, "@reject_", ST_FAIL);
 
-		for (size_t i = 0; i < r->spec.n; i++)
-			leaks += (r->hidden[i] == HID_LEAKED && inList(r->o.cats, r->spec.v[i].cat)
-				&& inList(r->o.funcs, r->spec.v[i].name));
-		size_t	nodiag = 0;
-
-		for (size_t i = 0; i < r->nRejects; i++)
-			nodiag += (r->rejects[i].st == REJ_ACCEPTED && inList(r->o.cats, r->rejects[i].cat));
-		if (nodiag)
-			printf("  %s%zu missing diagnostic%s%s", C_RED, nodiag, nodiag > 1 ? "s" : "",
-				C_RESET);
-		if (leaks)
-			printf("  %s%zu leaked%s", C_RED, leaks, C_RESET);
-		else if (r->o.lax)
+		/* what the failures above are made of, when not only tests */
+		if (leaks || nodiag)
+			printf("  %s(of which %d leaked, %d missing diagnostic%s)%s", C_RED, leaks,
+				nodiag, nodiag == 1 ? "" : "s", C_RESET);
+		if (r->o.lax)
 			printf("  %s(lax: visibility not checked)%s", C_DIM, C_RESET);
 	}
 	printf("\n");

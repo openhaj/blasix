@@ -13,6 +13,7 @@ RUNNER_SRCS		:= \
 	report/export.c \
 	run/discover.c \
 	run/exec.c \
+	run/virtual.c \
 	spec/database.c \
 	spec/require.c \
 	spec/standards.c \

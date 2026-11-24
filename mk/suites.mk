@@ -16,6 +16,7 @@
 CATEGORIES := \
 	ctype \
 	string \
+	strings \
 
 # ----- bits (shared by several headers) -----
 
@@ -27,6 +28,10 @@ BITS_HDRS := \
 	locale/locale_t_same.h \
 	stddef/NULL.h \
 	stddef/size_t.h \
+	stddef/wchar_t.h \
+	stdint/intmax_t.h \
+	stdint/uintmax_t.h \
+	version/__STDC_VERSION_INTTYPES_H__.h \
 	version/__STDC_VERSION_STRING_H__.h \
 
 # ----- ctype -----
@@ -125,3 +130,23 @@ string_UNITS := \
 
 string_HDRS := \
 	string_cases.h \
+
+# ----- strings -----
+
+strings_UNITS := \
+	defs \
+	compare/strcasecmp \
+	compare/strcasecmp_l \
+	compare/strncasecmp \
+	compare/strncasecmp_l \
+	bitops/ffs \
+	bitops/ffsl \
+	bitops/ffsll \
+	legacy/bcmp \
+	legacy/bcopy \
+	legacy/bzero \
+	legacy/index \
+	legacy/rindex \
+
+strings_HDRS := \
+	strings_cases.h \
