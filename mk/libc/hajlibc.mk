@@ -78,7 +78,7 @@ $(LIBC_ARCHIVE): $(LC_LIBC_BUILT)
 
 LIBC_COV_SUPPORTED	:= 1
 LC_COV_LIBC_CFLAGS	:= -fprofile-arcs -ftest-coverage \
-	-fprofile-info-section=gcov_info -O0 -g
+	-fprofile-info-section=gcov_info -O0 -g -fno-lto
 ifeq ($(COV),1)
 COV_LDFLAGS		:= -Wl,--undefined=__gcov_info_to_gcda \
 	$(shell $(CC) -print-file-name=libgcov.a)
@@ -87,5 +87,5 @@ endif
 LIBC_COV_PREPARE	= true
 LIBC_COV_REPORT		= \
 	scripts/cov-report.sh $(LC_COV_TREE) $(LC_COV_TREE)/objs \
-		$(abspath $(OUT))/cov $(OUT)/coverage $(HAJLIBC); \
+		$(abspath $(OUT))/cov $(abspath $(OUT))/coverage $(HAJLIBC); \
 	rm -rf $(OUT)/bin $(OUT)/fw $(LIBC_ARCHIVE)

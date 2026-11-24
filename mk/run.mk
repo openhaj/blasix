@@ -61,7 +61,7 @@ coverage:
 ifeq ($(LIBC_COV_SUPPORTED),1)
 	@$(LIBC_COV_PREPARE)
 	@rm -rf $(OUT)/bin $(OUT)/fw $(OUT)/cov $(OUT)/probe $(LIBC_DEPS)
-	-@$(MAKE) --no-print-directory run COV=1 PROBE=0
+	-@$(MAKE) --no-print-directory run COV=1
 	@$(LIBC_COV_REPORT)
 else
 	@echo "coverage: not supported for LIBC=$(LIBC) (needs an instrumented libc build)"

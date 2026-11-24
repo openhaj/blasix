@@ -86,7 +86,7 @@ $(OUT)/probe/%.status: $(OUT)/probe-src.stamp $(LIBC_DEPS)
 		-c $(OUT)/probe-src/$*.c -o $$base.o 2> $$base.err; then \
 		echo undeclared > $@; \
 	elif [ -n "$(filter $*,$(LC_PROBES_LINK))" ] && ! $(LIBC_CC) $$base.o \
-		$(LIBC_LDFLAGS) $(LIBC_LIBS) -o $$base 2>> $$base.err; then \
+		$(LIBC_LDFLAGS) $(COV_LDFLAGS) $(LIBC_LIBS) -o $$base 2>> $$base.err; then \
 		if grep -Eq 'undefined (reference to|symbol)' $$base.err; \
 		then echo unlinked; else echo broken; fi > $@; \
 	else echo ok > $@; fi; $(call lc_tick,probe $*)
