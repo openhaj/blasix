@@ -38,3 +38,18 @@ CompileFlags:
     - -DLC_CATEGORY="suite"
     - -DLC_FUNCTION="suite"
     - -fno-builtin
+    # The widest target (C23 + POSIX.1-2024 + XSI), so that the host
+    # headers declare every interface. Editor only: make never reads this
+    # file, a unit is built with the flags of the target (spec.mk).
+    # Comes after the -std=c11 above: the last -std wins.
+    - -std=c23
+    - -D_POSIX_C_SOURCE=202405L
+    - -D_XOPEN_SOURCE=800
+# What the host headers still do not declare (interfaces removed from
+# the host, or that only the libc under test has). The build still
+# catches a real mistake: the unit is unavailable, with its .err file.
+Diagnostics:
+  Suppress:
+    - ext_implicit_function_decl_c99   # Call to undeclared function 'x'
+    - err_unknown_typename             # Unknown type name 'x'
+    - err_undeclared_var_use           # Use of undeclared identifier 'x'
