@@ -32,7 +32,7 @@ CompileFlags:
 ---
 # Test units: the Makefile derives these from src/suites/<cat>/<func>.c.
 If:
-  PathMatch: src/suites/.*\.c
+  PathMatch: src/suites/.*\.[ch]
 CompileFlags:
   Add:
     - -DLC_CATEGORY="suite"

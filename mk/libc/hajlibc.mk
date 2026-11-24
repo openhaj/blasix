@@ -5,7 +5,7 @@
 # Default HAJLIBC: ../.. when blasix is a submodule of hajlibc
 # (hajlibc/tests/suite), otherwise ../hajlibc next to this repository.
 
-ifneq ($(wildcard ../../mk/hajlib.mk),)
+ifeq ($(shell test -f ../../mk/hajlib.mk && echo 1),1)
 HAJLIBC			?= $(abspath ../..)
 else
 HAJLIBC			?= $(abspath ../hajlibc)

@@ -10,7 +10,7 @@
  * @file spec.c
  * @brief Standards, option groups, the spec database and targets.
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/24 10:00:00 by Moutig
+ * @Updated: 2026/11/24 03:16:42 by Moutig
  *
  * Standards. The 4 ISO C editions and the 4 POSIX.1 editions form two
  * ladders; a POSIX edition is built on an ISO C edition (its "C base"):
@@ -55,7 +55,9 @@
  * Tags: a kind (`macro`, `type`, `either`: macro or function, `var`:
  * object with linkage; default function), an option group, base=V
  * (option moved to the base in V), ob=V,... (obsolescent from any of
- * them), removed=V,..., ext=NAME (extension, since EXT).
+ * them), removed=V,..., ext=NAME (extension, since EXT), same=H,...
+ * (other headers that declare it too, e.g. locale_t same=locale.h: the
+ * probe includes them after the header and checks they agree).
  */
 
 #include "runner/lcrun.h"
@@ -441,6 +443,8 @@ static void	parseTags(t_spec *sp, t_entry *e, char **tok, int n, const char *pat
 			e->removed = xstrdup(val);
 		else if (val && !strcmp(tok[i], "ext"))
 			e->ext = xstrdup(val);
+		else if (val && !strcmp(tok[i], "same"))
+			e->same = xstrdup(val);
 		else if (!val && isupper((unsigned char)tok[i][0]))
 		{
 			if (optFind(tok[i]) == NULL)
@@ -451,7 +455,7 @@ static void	parseTags(t_spec *sp, t_entry *e, char **tok, int n, const char *pat
 		}
 		else
 			parseErr(sp, path, ln, "unknown tag", tok[i]);
-		if (val && strcmp(tok[i], "ext") && !validList(val))
+		if (val && strcmp(tok[i], "ext") && strcmp(tok[i], "same") && !validList(val))
 			parseErr(sp, path, ln, "unknown version", val);
 	}
 }

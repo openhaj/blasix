@@ -10,7 +10,7 @@
  * @file tools.c
  * @brief lcrun spec tools: make fragment, probes, listings, lint, progress.
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/24 01:31:50 by Moutig
+ * @Updated: 2026/11/24 03:17:02 by Moutig
  *
  *   --spec-make     variables for the Makefile: the feature-test macros
  *                   of the target, the units to build, the probes;
@@ -171,6 +171,42 @@ static void	probeBody(FILE *fp, const t_entry *e)
 }
 
 /**
+ * @brief Check that the other headers of same= declare @p e the same way.
+ *
+ * Written after the first #include, before main(). What it captures from
+ * the first header must still agree once every other header is
+ * included, or the probe does not compile (reported as undeclared):
+ *   - type: a typedef of it and an object declared with both types
+ *     (two declarations of one object need compatible types);
+ *   - macro: its value, which must then be an integer constant, is
+ *     compared after the other headers;
+ *   - function, either, var: a conflicting redeclaration in the other
+ *     header is already a compile error.
+ *
+ * @param fp Probe source.
+ * @param e  Interface with a same= tag.
+ */
+static void	probeSame(FILE *fp, const t_entry *e)
+{
+	char	buf[256];
+	char	*save;
+
+	if (e->kind == KIND_TYPE)
+		fprintf(fp, "typedef %s\tlc_same_t;\n", e->name);
+	else if (e->kind == KIND_MACRO)
+		fprintf(fp, "enum { lc_same_v = (int)(%s) };\n", e->name);
+	snprintf(buf, sizeof(buf), "%s", e->same);
+	for (char *h = strtok_r(buf, ",", &save); h; h = strtok_r(NULL, ",", &save))
+		fprintf(fp, "#include <%s>\n", h);
+	if (e->kind == KIND_TYPE)
+		fprintf(fp, "extern lc_same_t\tlc_same_o;\nextern %s\tlc_same_o;\n", e->name);
+	else if (e->kind == KIND_MACRO)
+		fprintf(fp, "typedef char\tlc_same_chk[(lc_same_v == (int)(%s)) ? 1 : -1];\n",
+			e->name);
+	fprintf(fp, "\n");
+}
+
+/**
  * @brief Write <dir>/<cat>/<name>.c, the probe of one interface.
  *
  * @param e   Interface.
@@ -195,6 +231,8 @@ static int	writeProbe(const t_entry *e, int ext, const char *dir)
 	if (ext)
 		fprintf(fp, "#define _DEFAULT_SOURCE\n#define _GNU_SOURCE\n#define _BSD_SOURCE\n");
 	fprintf(fp, "#include <%s>\n\n", e->header);
+	if (e->same)
+		probeSame(fp, e);
 	probeBody(fp, e);
 	return (fclose(fp));
 }
@@ -321,7 +359,7 @@ static int	isCSince(const char *since)
 
 /**
  * @brief Lint one line: base= needs an option, no POSIX option on an ISO
- *        C line.
+ *        C line, same= lists other headers.
  *
  * @param e Line.
  * @return Number of errors (reported on stderr).
@@ -341,6 +379,12 @@ static int	checkLine(const t_entry *e)
 	{
 		fprintf(stderr, "%s:%d: %s: POSIX option %s on an ISO C line\n",
 			e->file, e->line, e->name, e->opt);
+		errors++;
+	}
+	if (e->same && (strstr(e->same, ".h") == NULL || strstr(e->same, e->header)))
+	{
+		fprintf(stderr, "%s:%d: %s: same= must list other headers (x.h,y.h)\n",
+			e->file, e->line, e->name);
 		errors++;
 	}
 	return (errors);

@@ -1,11 +1,11 @@
 
-# clang-tidy configuration for blasix.
+# clang-tidy configuration for blasix
 
 ## Run with
 
 ## make tidy   (lcrun and the framework)
 
-## Or automatically through clangd (when --clang-tidy is passed).
+## Or automatically through clangd (when --clang-tidy is passed)
 
 Checks: >
   bugprone-*,
@@ -30,7 +30,7 @@ FormatStyle: file
 
 CheckOptions:
 
-## Standard naming conventions.
+## Standard naming conventions
 
 - key: readability-identifier-naming.FunctionCase
     value: lower_case
@@ -45,7 +45,7 @@ CheckOptions:
 - key: readability-identifier-naming.EnumCase
     value: lower_case
 
-## We ignore identifiers starting with __, as they are reserved for the implementation.
+## We ignore identifiers starting with __, as they are reserved for the implementation
 
 - key: readability-identifier-naming.MacroDefinitionIgnoredRegexp
     value: '^__.*'

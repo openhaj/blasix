@@ -1,6 +1,6 @@
 # tooling.mk - developer tools: clangd database, lint, format, headers.
 
-.PHONY: compdb tidy format init headers-add headers-check
+.PHONY: compdb tidy format init headers-add headers-check sources-check
 
 # Generate compile_commands.json for clangd (needs `bear`).
 compdb:
@@ -28,3 +28,19 @@ headers-add:
 
 headers-check:
 	@./scripts/header-check.sh $(SRC_DIR) $(INC_DIR) templates
+
+# Every .c, .h of src/ and include/ and every spec must be listed in
+# sources.mk or suites.mk (nothing is picked up by a wildcard).
+LISTED_FILES	= $(sort $(ALL_C_FILES) $(SPECS))
+sources-check:
+	@mkdir -p $(BUILD_DIR)
+	@printf '%s\n' $(LISTED_FILES) > $(BUILD_DIR)/.listed
+	@find $(SRC_DIR) $(INC_DIR) $(SPEC_DIR) -type f \
+		\( -name '*.c' -o -name '*.h' -o -name '*.spec' \) | sort > $(BUILD_DIR)/.found
+	@st=0; \
+	for f in $$(comm -13 $(BUILD_DIR)/.listed $(BUILD_DIR)/.found); do \
+		echo "$$f: not listed in mk/sources.mk or mk/suites.mk"; st=1; done; \
+	for f in $$(comm -23 $(BUILD_DIR)/.listed $(BUILD_DIR)/.found); do \
+		echo "$$f: listed but missing"; st=1; done; \
+	rm -f $(BUILD_DIR)/.listed $(BUILD_DIR)/.found; \
+	[ $$st -eq 0 ] && echo "sources: $(words $(LISTED_FILES)) files, all listed"; exit $$st

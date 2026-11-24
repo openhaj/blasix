@@ -21,8 +21,8 @@ LCTARGET	:= -S $(STD) $(if $(OPTS),-O $(OPTS)) $(if $(filter 1,$(EXT)),-E)
 LCPATHS		:= -s $(SUITES_DIR) -p $(SPEC_DIR)
 
 # The libc profile (LIBC_CC, LIBC_CPPFLAGS, ..., libc-prepare).
-ifeq ($(wildcard mk/libc/$(LIBC).mk),)
-$(error LIBC=$(LIBC): no profile mk/libc/$(LIBC).mk (have: $(basename $(notdir $(wildcard mk/libc/*.mk)))))
+ifeq ($(filter $(LIBC),$(LIBC_PROFILES)),)
+$(error LIBC=$(LIBC): no profile mk/libc/$(LIBC).mk (have: $(LIBC_PROFILES)))
 endif
 include mk/libc/$(LIBC).mk
 
@@ -33,7 +33,7 @@ include mk/libc/$(LIBC).mk
 
 SPEC_MK		:= $(OUT)/spec.mk
 NO_SPEC_GOALS := clean fclean help standards options new init format \
-	headers-add headers-check spec-list spec-check matrix todo run-all
+	headers-add headers-check sources-check spec-list spec-check matrix todo run-all
 
 ifeq ($(filter $(NO_SPEC_GOALS),$(MAKECMDGOALS)),)
 include $(SPEC_MK)
@@ -49,7 +49,8 @@ lc_by_cat	= $(if $(CAT),$(filter $(addsuffix /%,$(subst $(comma), ,$(CAT))),$(1)
 lc_by_func	= $(if $(FUNC),$(filter $(addprefix %/,$(subst $(comma), ,$(FUNC))),$(1)),$(1))
 lc_select	= $(call lc_by_func,$(call lc_by_cat,$(1)))
 
-UNITS		:= $(call lc_select,$(LC_UNITS))
+# Only the units listed in suites.mk are built.
+UNITS		:= $(filter $(SUITE_UNITS),$(call lc_select,$(LC_UNITS)))
 BINS		:= $(addprefix $(OUT)/bin/,$(UNITS))
 PROBES		:= $(if $(filter 1,$(PROBE)),$(call lc_select,$(LC_PROBES_LINK) $(LC_PROBES_DECL)))
 PROBE_OUT	:= $(addprefix $(OUT)/probe/,$(addsuffix .status,$(PROBES)))

@@ -34,13 +34,15 @@
 #   make matrix [CAT=a,b]            tested / required per header, 8 standards
 #   make todo [CAT=a,b]              required by the target, no test yet
 #   make standards / options         the standards, the option groups
-#   make new CAT=string FUNC=strchr  create src/suites/string/strchr.c
+#   make new CAT=string FUNC=strchr  create src/suites/string/strchr.c, list it
+#                                    in mk/suites.mk
 #                                    (SINCE=V adds the spec entry, HEADER=x/y.h)
 #   make clean / fclean              remove build/$(LIBC) / build/
 #
 # Tooling:
 #   make init                        enable the git hooks
 #   make headers-check / headers-add license headers
+#   make sources-check               every file listed in mk/sources.mk, mk/suites.mk
 #   make compdb / tidy / format      clangd database, clang-tidy, clang-format
 #
 # Options: SHOW_FLAGS=1 (full command lines), JOBS=n

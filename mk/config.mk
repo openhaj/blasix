@@ -24,6 +24,9 @@ HOST_CC			?= cc
 STD_HOST		:= c11
 JOBS			?= $(shell nproc 2>/dev/null || echo 4)
 
+# The libc profiles of mk/libc/ (make run LIBC=<name>).
+LIBC_PROFILES	:= host hajlibc
+
 # The 8 standards (make standards; make run-all runs every one).
 STANDARDS		:= c99 c11 c17 c23 posix-2001 posix-2008 posix-2017 posix-2024
 

@@ -35,7 +35,7 @@ DEPS		+= $(FW_OBJS:.o=.d)
 # is not a build error: the binary is just absent, the compiler output
 # is kept in <bin>.err and lcrun reports the unit as unavailable.
 
-$(OUT)/bin/%: $(SUITES_DIR)/%.c $(FW_HDRS) $(FW_OBJS) $(LIBC_DEPS) $(SPEC_MK)
+$(OUT)/bin/%: $(SUITES_DIR)/%.c $(FW_HDRS) $(SUITE_HDRS) $(FW_OBJS) $(LIBC_DEPS) $(SPEC_MK)
 	@mkdir -p $(@D)
 	$(AT)if $(LIBC_CC) $(LIBC_BASE) $(LC_STD_CFLAGS) \
 		$(if $(filter $*,$(LC_EXT_UNITS)),$(LC_EXT_CFLAGS)) \

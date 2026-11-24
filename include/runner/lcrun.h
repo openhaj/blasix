@@ -10,7 +10,7 @@
  * @file lcrun.h
  * @brief Shared types and functions of the lcrun test runner.
  * @Created: 2026/11/23 04:42:42 by Moutig
- * @Updated: 2026/11/24 11:00:00 by Moutig
+ * @Updated: 2026/11/24 03:17:14 by Moutig
  *
  * lcrun is built with the host libc. It reads the spec database,
  * selects what a target standard requires, discovers the test binaries,
@@ -106,6 +106,8 @@ typedef struct s_entry
 	char			*ob;		/* Obsolescent from (comma list). */
 	char			*removed;	/* Removed in (comma list). */
 	char			*ext;		/* Extension family (GNU, BSD). */
+	char			*same;		/* Other headers that declare it too (comma
+								   list): the probe checks they agree. */
 	char			*file;		/* spec file of the line, for messages. */
 	int				line;		/* Line in that file. */
 	struct s_entry	*alt;		/* Line of the other ladder, or NULL. */

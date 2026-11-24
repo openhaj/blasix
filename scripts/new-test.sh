@@ -8,6 +8,9 @@
 # HEADER is only needed to create a new spec file whose header the
 # category does not spell (default: sys_stat -> sys/stat.h).
 #
+# The unit is also added to mk/suites.mk (CATEGORY_UNITS, kept sorted;
+# a new category gets its block and its CATEGORIES entry).
+#
 # The "Spec:" line of the new file points to the pages of data/ that
 # describe the function, when they exist.
 set -eu
@@ -62,3 +65,22 @@ sed -e "s|@CAT@.h|$header|g" -e "s|@FUNC@|$func|g" -e "s|@SPEC@|$func()|g" \
 	-e "s|@AUTHOR@|$AUTHOR_NAME|g" -e "s|@EMAIL@|$AUTHOR_EMAIL|g" \
 	templates/test.c > "$file"
 echo "created $file"
+
+# List it in mk/suites.mk: the build only compiles the listed units.
+mkfile=mk/suites.mk
+if ! grep -q "^${cat}_UNITS :=" "$mkfile"; then
+	# New category: entry in CATEGORIES, then an empty block at the end.
+	LC_ALL=C awk -v c="$cat" '
+		/^CATEGORIES :=/ { inb = 1; print; next }
+		inb && !done && (/^$/ || $1 > c) { printf "\t%s \\\n", c; done = 1 }
+		/^$/ { inb = 0 }
+		{ print }' "$mkfile" > "$mkfile.tmp" && mv "$mkfile.tmp" "$mkfile"
+	printf '\n# ----- %s -----\n\n%s_UNITS := \\\n\n%s_HDRS :=\n' \
+		"$cat" "$cat" "$cat" >> "$mkfile"
+fi
+LC_ALL=C awk -v c="$cat" -v f="$func" '
+	$0 == c "_UNITS := \\" { inb = 1; print; next }
+	inb && !done && (/^$/ || $1 > f) { printf "\t%s \\\n", f; done = 1 }
+	/^$/ { inb = 0 }
+	{ print }' "$mkfile" > "$mkfile.tmp" && mv "$mkfile.tmp" "$mkfile"
+echo "listed $cat/$func in $mkfile"

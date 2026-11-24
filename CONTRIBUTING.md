@@ -18,10 +18,11 @@ src/runner/        lcrun (host libc): spec.c (editions, database, targets),
                    report.c (report, TSV, JSON, compare)
 include/framework/ lc.h (test API), sys.h
 include/runner/    lcrun.h
-mk/                build modules: config.mk (layout), sources.mk,
+mk/                build modules: config.mk (layout), sources.mk and
+                   suites.mk (every compiled file, listed: no wildcard),
                    build.mk (compile helpers), runner.mk, target.mk,
                    tests.mk, run.mk, tooling.mk
-mk/libc/           one profile per libc: host.mk, hajlibc.mk, musl.mk
+mk/libc/           one profile per libc: host.mk, hajlibc.mk
 templates/         test.c (make new)
 scripts/           new-test.sh, cov-report.sh, header*.sh
 ```
@@ -109,7 +110,14 @@ memrchr       EXT            ext=GNU
 - tags: one option group (`make options`), `base=V` (moved from its
   option group to the base in V), `ob=V[,W]` (obsolescent from V, or W:
   `asctime` is `ob=POSIX.1-2008,C23`), `removed=V[,W]`, `ext=NAME`
-  (extension family).
+  (extension family), `same=H[,H2]` (other headers that declare it too).
+- **Shared definitions**: when the standard says a header defines
+  something "as described in" another header (`locale_t` in `<ctype.h>`,
+  as in `<locale.h>`), tag it `same=locale.h`: its probe includes both
+  headers and fails if they disagree (a type: the two types must be
+  compatible; a macro: the same integer value; a function or variable:
+  no conflicting redeclaration). Each header still lists it in its own
+  spec file, so that each header is checked to provide it.
 
 For a target, each interface is **required** (base), **required by an
 option** (its group is in `OPTS` and it has not moved to the base yet),
@@ -184,6 +192,14 @@ make new CAT=string FUNC=strchr                 # entry already in spec/
 make new CAT=string FUNC=strchrnul SINCE=EXT    # also adds the entry
 ```
 
+The makefiles use no wildcard: every compiled file is listed. `make new`
+adds the unit to `<category>_UNITS` in `mk/suites.mk` (a new category
+also gets its entry in `CATEGORIES`); a helper shared by the units goes
+in `<category>_HDRS` by hand, a runner or framework file in
+`mk/sources.mk`. A unit that is not listed is not built: `make
+sources-check` (also run by `make spec-check`) reports any file of
+`src/`, `include/` or `spec/` missing from the lists.
+
 ### The file
 
 The category and the function come from the path, so a file only holds
@@ -238,6 +254,19 @@ the test).
 `TEST_FN(other_function, name)` attaches a test to another function than
 the file's (e.g. `getc_unlocked` cases in `getc.c`).
 
+### Cases shared by a category
+
+When every function of a header is tested the same way, write the
+cases once in a header of the category, `src/suites/<cat>/<name>.h`, and
+instantiate them from each unit (a change to it rebuilds the units).
+`src/suites/ctype/ctype_cases.h` is the example: the oracle of the
+classes (from XBD 7.3.1.1, built from character literals), the ISO C
+relations between classes, and generators (`CT_CLASSIFIER_TESTS`,
+`CT_CASEMAP_TESTS`, `CT_LOCALE_TESTS`) that each unit calls with its
+function and class. Functions of other headers needed by a case
+(`setlocale`, `newlocale`) are referenced weakly there, so a libc without
+them still builds the units and those cases skip.
+
 ### Checks
 
 | Macro | Checks | Message on failure |
@@ -248,6 +277,7 @@ the file's (e.g. `getc_unlocked` cases in `getc.c`).
 | `EXPECT_PTREQ PTRNE (a, b)`, `EXPECT_NULL(p)`, `EXPECT_NOTNULL(p)` | pointers | both addresses |
 | `EXPECT_STREQ STRNE (a, b)` | strings, NULL-safe | both quoted + first difference |
 | `EXPECT_MEMEQ(a, b, n)` | `n` bytes | first differing byte |
+| `EXPECT_TYPE(expr, type)` | type of `expr` compatible with `type` (prototypes: `EXPECT_TYPE(&isalpha, int (*)(int))`) | `failed` |
 
 Each `EXPECT_*` has an `ASSERT_*` twin that also leaves the test body
 (only directly in a `TEST` body). `LC_SIGN(x)`, `SKIP("reason")` and
@@ -308,7 +338,8 @@ another libc, so it is not used (`src/framework/cov.c`). Needs GCC ≥ 12 and
 Write `mk/libc/<name>.mk` (contract in `host.mk`): `LIBC_CC`,
 `LIBC_CPPFLAGS`, `LIBC_CFLAGS` (no `-std`, no feature macros: the target
 sets them), `LIBC_LDFLAGS`, `LIBC_LIBS`, `LIBC_DEPS`, a `libc-prepare`
-recipe, optionally the `LIBC_COV_*` hooks. Then `make run LIBC=<name>`.
+recipe, optionally the `LIBC_COV_*` hooks. Add `<name>` to `LIBC_PROFILES`
+in `mk/config.mk`, then `make run LIBC=<name>`.
 
 ### Adding an edition
 

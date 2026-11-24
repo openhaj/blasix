@@ -38,7 +38,7 @@ compare: $(RUNNER)
 spec-list: $(RUNNER)
 	@$(RUNNER) $(LCTARGET) $(LCPATHS) $(if $(filter 1,$(V)),-v) --spec-list
 
-spec-check: $(RUNNER)
+spec-check: $(RUNNER) sources-check
 	@$(RUNNER) $(LCTARGET) $(LCPATHS) --spec-check
 
 # Progress: tested / required per header in each of the 8 standards.

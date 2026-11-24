@@ -55,7 +55,8 @@ so several libcs and targets can live side by side.
 ## Testing your own libc
 
 Write a profile `mk/libc/<name>.mk` that says how to build against it,
-then run `make run LIBC=<name>`. For a libc installed under
+add `<name>` to `LIBC_PROFILES` in `mk/config.mk`, then run
+`make run LIBC=<name>`. For a libc installed under
 `/opt/mylibc`, built with `-nostdlib`:
 
 ```make
@@ -87,7 +88,7 @@ make compare A=host B=mylibc                 # what differs from the host libc
 | `LIBC_DEPS` | files whose change rebuilds the tests (e.g. `libc.a`) |
 | `libc-prepare` | recipe run before building (e.g. build the libc, or check it exists) |
 
-`mk/libc/host.mk` and `mk/libc/musl.mk` are minimal examples,
+`mk/libc/host.mk` is a minimal example,
 `mk/libc/hajlibc.mk` builds the libc itself and supports coverage
 (`LIBC_COV_*`, see [CONTRIBUTING.md](CONTRIBUTING.md)).
 

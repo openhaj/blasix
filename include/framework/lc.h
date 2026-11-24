@@ -10,7 +10,7 @@
  * @file lc.h
  * @brief Test-side API: TEST, EXPECT_*, ASSERT_*, helpers.
  * @Created: 2026/11/23 04:44:31 by Moutig
- * @Updated: 2026/11/24 00:36:56 by Moutig
+ * @Updated: 2026/11/24 03:17:23 by Moutig
  *
  * One test file = one function of the libc under test:
  *
@@ -379,6 +379,20 @@ void	lc_log(const char *msg);
 # define ASSERT_STREQ(a, b)		LC_STR(ASSERT, "STREQ", 1, a, b)
 # define EXPECT_MEMEQ(a, b, n)	LC_MEM(EXPECT, a, b, n)
 # define ASSERT_MEMEQ(a, b, n)	LC_MEM(ASSERT, a, b, n)
+
+/*
+ * Types: is the type of an expression compatible with a type? Checked at
+ * run time (reported like any check, the unit still builds). Uses
+ * __typeof__ and __builtin_types_compatible_p (GCC, clang).
+ *
+ *     EXPECT_TYPE(&isalpha, int (*)(int));
+ */
+
+/** Is the type of @p expr compatible with @p type? (1 or 0, constant) */
+# define LC_TYPE_IS(expr, type)	__builtin_types_compatible_p(__typeof__(expr), type)
+
+# define EXPECT_TYPE(expr, type)	LC_BOOL(EXPECT, "TYPE", 1, LC_TYPE_IS(expr, type))
+# define ASSERT_TYPE(expr, type)	LC_BOOL(ASSERT, "TYPE", 1, LC_TYPE_IS(expr, type))
 
 /** Sign of a comparison result (strcmp, memcmp, ...): -1, 0 or 1. */
 # define LC_SIGN(x)				(((x) > 0) - ((x) < 0))
