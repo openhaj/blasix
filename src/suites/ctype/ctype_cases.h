@@ -10,7 +10,7 @@
  * @file ctype_cases.h
  * @brief Oracle and shared test cases of the <ctype.h> units.
  * @Created: 2026/11/24 03:35:02 by Moutig
- * @Updated: 2026/11/24 04:00:01 by Moutig
+ * @Updated: 2026/11/24 10:32:05 by Moutig
  *
  * Every <ctype.h> function is checked the same way, so the cases live
  * here and each unit (src/suites/ctype/<function>.c) instantiates them
@@ -338,7 +338,7 @@ static const char *const	ct_locales[] = {
  *
  * @param check Called once per locale, with its name.
  * @return Number of locales tried; 0 if none is installed, -1 if the
- *         libc has no setlocale() (the caller skips, see CT_SKIP_LOCALES).
+ *         libc has no setlocale() (see CT_SKIP_LOCALES).
  */
 static inline int	ct_forEachLocale(void (*check)(const char *name))
 {
@@ -363,14 +363,18 @@ static inline int	ct_forEachLocale(void (*check)(const char *name))
 #endif
 }
 
-/** Skip when ct_forEachLocale() returned @p n <= 0, saying why. */
-# define CT_SKIP_LOCALES(n)														do { if ((n) < 0) SKIP("no setlocale() (<locale.h>) in this libc");			if ((n) == 0) SKIP("no other locale installed"); } while (0)
+/**
+ * Leave the case when ct_forEachLocale() returned @p n <= 0: not
+ * implemented by the libc (no setlocale()), or skipped (no other locale
+ * installed on this system). @p n is evaluated once (it runs the checks).
+ */
+# define CT_SKIP_LOCALES(n)														do { int ct_n_ = (n); if (ct_n_ < 0) NOT_IMPLEMENTED("setlocale() (<locale.h>)");	if (ct_n_ == 0) SKIP("no other locale installed"); } while (0)
 
-/** Skip when the libc has no newlocale() / freelocale(). */
+/** Not implemented when the libc has no newlocale() / freelocale(). */
 # ifdef CT_HAVE_NEWLOCALE
-#  define CT_NEED_NEWLOCALE()													do { if (newlocale == 0 || freelocale == 0)										SKIP("no newlocale() / freelocale() (<locale.h>) in this libc"); } while (0)
+#  define CT_NEED_NEWLOCALE()													do { if (newlocale == 0 || freelocale == 0)										NOT_IMPLEMENTED("newlocale() / freelocale() (<locale.h>)"); } while (0)
 # else
-#  define CT_NEED_NEWLOCALE()													SKIP("no <locale.h> with LC_CTYPE_MASK in this libc")
+#  define CT_NEED_NEWLOCALE()													NOT_IMPLEMENTED("<locale.h> with LC_CTYPE_MASK")
 # endif
 
 /* ----- Test generators ----- */

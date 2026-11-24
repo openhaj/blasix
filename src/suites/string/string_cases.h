@@ -10,7 +10,7 @@
  * @file string_cases.h
  * @brief Shared helpers and cases of the <string.h> units.
  * @Created: 2026/11/24 05:21:31 by Moutig
- * @Updated: 2026/11/24 05:35:48 by Moutig
+ * @Updated: 2026/11/24 10:32:27 by Moutig
  *
  * What every unit of src/suites/string/ needs around the function it
  * tests:
@@ -81,31 +81,30 @@
 extern locale_t	newlocale(int mask, const char *locale, locale_t base) __attribute__((weak));
 extern void		freelocale(locale_t locale) __attribute__((weak));
 
-/**
- * @brief A new "POSIX" locale object, or (locale_t)0 when the libc has
- *        no newlocale() (the caller skips).
- */
-static inline locale_t	st_posixLocale(void)
+/** Do newlocale() and freelocale() exist in the libc (weak references)? */
+static inline int	st_haveNewlocale(void)
 {
-	if (!newlocale || !freelocale)
-		return ((locale_t)0);
-	return (newlocale(LC_ALL_MASK, "POSIX", (locale_t)0));
+	return (newlocale != 0 && freelocale != 0);
 }
 
 /*
- * Declare `loc`, a "POSIX" locale object, or skip the case. Released by
- * ST_FREE_LOCALE (the process ends after the case anyway).
+ * Declare `loc`, a "POSIX" locale object. Without newlocale() /
+ * freelocale() the case is not implemented by the libc; when newlocale()
+ * gives no object, it is skipped (newlocale()'s own tests judge that).
+ * Released by ST_FREE_LOCALE (the process ends after the case anyway).
  */
 #  define ST_POSIX_LOCALE(loc)												\
-	locale_t loc = st_posixLocale();										\
+	if (!st_haveNewlocale())												\
+		NOT_IMPLEMENTED("newlocale() / freelocale() (<locale.h>)");			\
+	locale_t loc = newlocale(LC_ALL_MASK, "POSIX", (locale_t)0);			\
 	if (loc == (locale_t)0)													\
-		SKIP("no newlocale() / freelocale() or no \"POSIX\" locale")
+		SKIP("newlocale() gave no \"POSIX\" locale object")
 #  define ST_FREE_LOCALE(loc)	freelocale(loc)
 # else
 #  define ST_POSIX_LOCALE(loc)												\
 	locale_t loc = (locale_t)0;												\
 	if (loc == (locale_t)0)													\
-		SKIP("no <locale.h> with newlocale() in this libc")
+		NOT_IMPLEMENTED("<locale.h> with newlocale()")
 #  define ST_FREE_LOCALE(loc)	((void)0)
 # endif
 

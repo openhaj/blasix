@@ -16,7 +16,7 @@ make run LIBC=hajlibc STD=posix-2008 OPTS=   # another edition, no XSI
 make run CAT=string FUNC=strlen,strcmp       # only some functions
 make run-all                                 # the 8 standards, one line each
 make compare A=host B=hajlibc                # same target, two libcs
-make coverage LIBC=hajlibc                   # line coverage of the libc sources
+make coverage LIBC=hajlibc                   # coverage of the libc (lcov tracefile)
 make spec-list STD=c11                       # what C11 requires
 make matrix                                  # tested / required, 8 standards
 make help                                    # all targets and options
@@ -51,13 +51,21 @@ A run reports, for the chosen libc and target:
   header (`undeclared`) and defined by the library (`unlinked`), and
   in strict mode whether a name the target forbids is visible anyway
   (`leak`);
-- **tests**: each runs in its own process: `pass`, `fail`, `skip`,
-  `crash`, `timeout`, `error`, or `unavailable` (did not build);
-- **conformance per header**: how many required interfaces are present
-  and verified, with the lists of missing, failing and untested ones.
+- **tests**: each runs in its own process: `pass`, `fail`, `crash`,
+  `timeout`, `error`, `skip` (the environment does not allow it: no other
+  locale installed, ...), `unimplemented` (the libc lacks what the test
+  needs: `setlocale()`, ...), or `unavailable` (the unit did not build:
+  because its interface is not implemented, or a build error);
+- **conformance per header**: a verdict on each required interface
+  (`verified`, `failing`, `missing`, `broken`, `unbuilt`, `untested`), how
+  many are present and verified, with the lists of missing, failing,
+  unbuilt and untested ones.
 
 Results go to `build/<libc>/<target>/` (`results.tsv`, `results.json`),
-so several libcs and targets can live side by side.
+so several libcs and targets can live side by side. `results.json` holds
+everything a report needs: every test with its messages, every unit that
+did not build with its log, every interface with its verdict, and the
+conformance table.
 
 ## Testing your own libc
 

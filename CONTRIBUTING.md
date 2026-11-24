@@ -29,7 +29,8 @@ mk/                build modules: config.mk (layout), sources.mk and
 mk/libc/           one profile per libc: host.mk, hajlibc.mk
 templates/         test.c (a unit), defs.c (a header's definitions),
                    spec.spec (a spec file, with its guide); make new uses them
-scripts/           new-test.sh, cov-report.sh, header*.sh
+scripts/           new-test.sh, cov-report.sh and gcov2lcov.awk (coverage),
+                   header*.sh
 ```
 
 ## The target in detail
@@ -213,7 +214,8 @@ For every required interface, a tiny program is generated
 | --- | --- |
 | `ok` | the header declares it and the library defines it |
 | `undeclared` | the header does not declare it under the target's macros (a macro: not `#define`d; a type: unknown) |
-| `unlinked` | declared, but the library does not define it |
+| `unlinked` | declared, but the library does not define it (undefined symbol) |
+| `broken` | declared, but the link failed for another reason (compiler crash, library built for coverage, ...): see `probe/<cat>/<name>.err` |
 | `leaked` / `hidden` | hidden probe (strict mode): an interface the target forbids is visible / is not |
 | `accepted` / `rejected` | reject probe: a translation unit the standard requires the implementation to refuse compiled / was refused |
 
@@ -242,15 +244,34 @@ as macros, such as `stdin`, must be macros.
 ### Tests
 
 Each test runs in its own process. Status: `pass`, `fail` (a check
-failed), `skip`, `crash` (signal), `timeout`, `error` (the process exited
-before the end of the test), `unavailable` (the unit did not build
-against this libc).
+failed), `crash` (signal), `timeout`, `error` (the process exited
+before the end of the test), `skip` (`SKIP`: the environment does not
+allow it), `unimplemented` (`NOT_IMPLEMENTED`: the libc lacks what the test
+needs), `unavailable` (the unit did not build against this libc). The
+first four are failures; `skip` and `unimplemented` did not run and count
+neither as passed nor as failed.
+
+Each required interface then gets one verdict, the first that applies:
+
+| Verdict | When |
+| --- | --- |
+| `missing` | not implemented: its probe says `undeclared` or `unlinked` (without probes: its unit did not build because of it) |
+| `broken` | its probe says `broken` |
+| `failing` | a test failed |
+| `verified` | tests ran and every one passed |
+| `unbuilt` | its unit did not build, for another reason (a build error) |
+| `untested` | no test ran: none written yet, or all skipped / not implemented |
+
+The console table and `results.json` (`interfaces[].verdict`,
+`conformance`) come from the same computation (`interfaceResult()`,
+`confHeader()` in `report/conformance.c`).
 
 ### The report
 
 1. failures, with the spec reference of the test, the failed checks
    and the test's captured stdout / stderr;
-2. units that did not build, with the compiler message;
+2. units that did not build, why (`not implemented` or `build error`) and
+   the error lines of the build log;
 3. results per header (per function with `V=1`): tests, pass, fail,
    crash, timeout, error, skip, checks, CPU time;
 4. **conformance per header** for the target: `req` (required; `opt`
@@ -258,9 +279,9 @@ against this libc).
    (probes), `leak` (strict mode: forbidden and visible), `nodiag`
    (reject probes that compiled), `tested`,
    `pass`, `fail`, `present` (ok / req) and
-   `verified` (tested with every test passing / req), with the lists of
-   undeclared, unlinked, failing and untested interfaces (`V=1`: in
-   full);
+   `verified` (tests ran and every one passed / req), with the lists of
+   undeclared, unlinked, link error, failing, not built and untested
+   interfaces (`V=1`: in full);
 5. slowest tests, peak RSS, flaky tests (`REPEAT=n`);
 6. totals.
 
@@ -474,8 +495,18 @@ Rules:
 | `EXPECT_TYPE(expr, type)` | type of `expr` compatible with `type` (prototypes: `EXPECT_TYPE(&isalpha, int (*)(int))`) | `failed` |
 
 Each `EXPECT_*` has an `ASSERT_*` twin that also leaves the test body
-(only directly in a `TEST` body). `LC_SIGN(x)`, `SKIP("reason")` and
-`LOG("message")` complete the set.
+(only directly in a `TEST` body). `LC_SIGN(x)`, `SKIP("reason")`,
+`NOT_IMPLEMENTED("what")` and `LOG("message")` complete the set.
+
+`SKIP` and `NOT_IMPLEMENTED` both leave the test without a result, for
+different reasons:
+
+- `NOT_IMPLEMENTED("setlocale() (<locale.h>)")`: the libc lacks something
+  the test needs (a function referenced weakly that is NULL, a header or a
+  macro that is missing). It is a gap of the libc, reported as such;
+- `SKIP("no other locale installed")`: the libc may be fine, the
+  environment does not allow the test (no locale installed, no guarded
+  mapping, the execution character set is not ASCII).
 
 ### What to cover, function by function
 
@@ -506,11 +537,21 @@ strlen empty]`.
 
 ## Coverage
 
-`make coverage LIBC=hajlibc` rebuilds hajlibc with coverage counters,
-runs the tests, merges the counters of every test process and prints the
-line coverage per source directory (`coverage/lines.tsv` per file;
-`index.html` with `gcovr`). hajlibc is rebuilt without instrumentation
-afterwards.
+`make coverage LIBC=hajlibc` copies hajlibc's sources to
+`build/hajlibc/<target>/libc-cov/` and builds them with coverage counters
+there (the hajlibc tree itself is never instrumented), runs the tests,
+merges the counters of every test process, then runs gcov on **every
+object of the library**: a file no test linked or ran counts as never
+executed, so the percentages are over the whole library. It writes, in
+`build/hajlibc/<target>/coverage/`:
+
+- `lcov.info`: an lcov tracefile (lines, functions, branches), the
+  sources named by their path in the hajlibc tree; written by
+  `scripts/gcov2lcov.awk` from gcov's output, lcov itself is not needed;
+- `lines.tsv`: per file, path, percentage of lines, lines;
+- `html/`: genhtml's report, when lcov is installed.
+
+It prints the line coverage per directory.
 
 The system libgcov runtime is built against glibc and cannot link with
 another libc, so it is not used (`src/framework/cov.c`). Needs GCC ≥ 12 and

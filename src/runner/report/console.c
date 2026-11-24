@@ -10,7 +10,7 @@
  * @file console.c
  * @brief Console report of a run.
  * @Created: 2026/11/24 08:14:20 by Moutig
- * @Updated: 2026/11/24 08:20:30 by Moutig
+ * @Updated: 2026/11/24 10:28:49 by Moutig
  *
  * Failures, units that did not build, results per category (per
  * function with -v), conformance (report/conformance.c), slowest tests,
@@ -38,8 +38,8 @@ typedef struct s_agg
 }	t_agg;
 
 /**
- * @brief Color of a status: green pass, yellow skip, magenta crash or
- *        timeout, dim unavailable, red otherwise.
+ * @brief Color of a status: green pass, yellow skip, cyan not implemented,
+ *        magenta crash or timeout, dim unavailable, red otherwise.
  *
  * @param st Status.
  * @return Escape sequence, or "" without colors.
@@ -50,6 +50,7 @@ static const char	*stColor(t_status st)
 	{
 		case ST_PASS: return (C_GREEN);
 		case ST_SKIP: return (C_YEL);
+		case ST_UNIMPL: return (C_CYAN);
 		case ST_UNAVAIL: return (C_DIM);
 		case ST_CRASH:
 		case ST_TIMEOUT: return (C_MAG);
@@ -66,7 +67,7 @@ static const char	*stColor(t_status st)
 static const char	*stLabel(t_status st)
 {
 	static const char	*l[ST_COUNT] = {
-		"PASS", "FAIL", "SKIP", "CRASH", "TIMEOUT", "ERROR", "N/A"
+		"PASS", "FAIL", "SKIP", "N/I", "CRASH", "TIMEOUT", "ERROR", "N/A"
 	};
 
 	return (l[st]);
@@ -94,7 +95,8 @@ double	pct(int part, int whole)
 /**
  * @brief Print one row of a results table.
  *
- * pass% is over the tests that ran (skipped ones excluded).
+ * pass% is over the tests that ran (skipped and not implemented ones
+ * excluded).
  *
  * @param label     Category, "cat/func" or TOTAL.
  * @param a         Counters.
@@ -102,19 +104,20 @@ double	pct(int part, int whole)
  */
 static void	aggRow(const char *label, const t_agg *a, int showFuncs)
 {
-	int	ran = a->tests - a->n[ST_SKIP];
+	int	ran = a->tests - a->n[ST_SKIP] - a->n[ST_UNIMPL];
 
 	printf("  %-22s", label);
 	if (showFuncs)
 		printf(" %5d %5d", a->funcs, a->unavail);
-	printf(" %6d %s%6d%s %s%5d%s %s%5d%s %s%5d%s %s%5d%s %s%5d%s",
+	printf(" %6d %s%6d%s %s%5d%s %s%5d%s %s%5d%s %s%5d%s %s%5d%s %s%5d%s",
 		a->tests,
 		a->n[ST_PASS] ? C_GREEN : "", a->n[ST_PASS], C_RESET,
 		a->n[ST_FAIL] ? C_RED : "", a->n[ST_FAIL], C_RESET,
 		a->n[ST_CRASH] ? C_MAG : "", a->n[ST_CRASH], C_RESET,
 		a->n[ST_TIMEOUT] ? C_MAG : "", a->n[ST_TIMEOUT], C_RESET,
 		a->n[ST_ERROR] ? C_RED : "", a->n[ST_ERROR], C_RESET,
-		a->n[ST_SKIP] ? C_YEL : "", a->n[ST_SKIP], C_RESET);
+		a->n[ST_SKIP] ? C_YEL : "", a->n[ST_SKIP], C_RESET,
+		a->n[ST_UNIMPL] ? C_CYAN : "", a->n[ST_UNIMPL], C_RESET);
 	printf(" %s%6.1f%%%s %8ld %9.1f\n",
 		(ran && a->n[ST_PASS] == ran) ? C_GREEN : (ran ? C_RED : ""),
 		pct(a->n[ST_PASS], ran), C_RESET, a->checks, a->cpuMs);
@@ -131,8 +134,8 @@ static void	aggHeader(const char *first, int showFuncs)
 	printf("%s  %-22s", C_BOLD, first);
 	if (showFuncs)
 		printf(" %5s %5s", "funcs", "n/a");
-	printf(" %6s %6s %5s %5s %5s %5s %5s %7s %8s %9s%s\n",
-		"tests", "pass", "fail", "crash", "tmo", "err", "skip",
+	printf(" %6s %6s %5s %5s %5s %5s %5s %5s %7s %8s %9s%s\n",
+		"tests", "pass", "fail", "crash", "tmo", "err", "skip", "n/i",
 		"pass%", "checks", "cpu ms", C_RESET);
 }
 
@@ -179,7 +182,7 @@ static void	sectionTests(const t_run *r)
 }
 
 /**
- * @brief Every test that did not pass or skip: where, spec reference,
+ * @brief Every test that failed (fail, crash, timeout, error): where, spec reference,
  *        messages and captured output.
  *
  * @param r Run.
@@ -192,7 +195,7 @@ static void	sectionFailures(const t_run *r)
 	{
 		const t_test	*t = &r->tests[i];
 
-		if (t->st == ST_PASS || t->st == ST_SKIP)
+		if (!statusFailed(t->st))
 			continue ;
 		if (!shown++)
 			printf("\n%s=== Failures ===%s\n", C_BOLD, C_RESET);
@@ -213,7 +216,8 @@ static void	sectionFailures(const t_run *r)
 }
 
 /**
- * @brief Units that did not build, with the start of the compiler output.
+ * @brief Units that did not build, why (the interface is not implemented,
+ *        or another build error), and the error lines of the build log.
  *
  * @param r Run.
  */
@@ -231,7 +235,9 @@ static void	sectionUnavailable(const t_run *r)
 		if (!shown++)
 			printf("\n%s=== Unavailable (did not build against this libc) ===%s\n",
 				C_BOLD, C_RESET);
-		printf("  %s%s/%s%s\n", C_DIM, u->cat, u->func, C_RESET);
+		printf("  %s%s/%s%s  %s(%s)%s\n", C_DIM, u->cat, u->func, C_RESET,
+			strcmp(unitReason(r, u), "build") ? C_CYAN : C_RED,
+			strcmp(unitReason(r, u), "build") ? "not implemented" : "build error", C_RESET);
 		e = u->err;
 		if (e == NULL)
 			printf("      (no build log)\n");
@@ -280,7 +286,7 @@ static void	sectionTables(const t_run *r)
 		i = j;
 	}
 	printf("  %s\n", "------------------------------------------------------------"
-		"-------------------------------");
+		"-------------------------------------");
 	printf("%s", C_BOLD);
 	aggRow("TOTAL", &tot, 1);
 	printf("%s", C_RESET);
@@ -406,7 +412,7 @@ void	reportConsole(const t_run *r)
 		sectionConformance(r);
 		sectionExtremes(r);
 	}
-	ran = (int)r->nTests - n[ST_SKIP];
+	ran = (int)r->nTests - n[ST_SKIP] - n[ST_UNIMPL];
 	{
 		char	target[256];
 

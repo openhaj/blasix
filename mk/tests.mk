@@ -68,7 +68,10 @@ $(OUT)/bin/%: $(SUITES_DIR)/%.c $(FW_HDRS) $(SUITE_HDRS) $(FW_OBJS) $(LIBC_DEPS)
 
 # ----- Probes: is every required interface declared and defined? -----
 # undeclared: the probe does not compile (header misses it);
-# unlinked:   it compiles but does not link (library misses it);
+# unlinked:   it compiles but does not link: undefined symbol (library
+#             misses it);
+# broken:     it compiles but does not link for another reason (compiler
+#             crash in LTO, archive built for coverage, ...): see the .err;
 # ok:         both. Macros and types are only compiled.
 
 $(OUT)/probe-src.stamp: $(SPEC_MK)
@@ -84,7 +87,8 @@ $(OUT)/probe/%.status: $(OUT)/probe-src.stamp $(LIBC_DEPS)
 		echo undeclared > $@; \
 	elif [ -n "$(filter $*,$(LC_PROBES_LINK))" ] && ! $(LIBC_CC) $$base.o \
 		$(LIBC_LDFLAGS) $(LIBC_LIBS) -o $$base 2>> $$base.err; then \
-		echo unlinked > $@; \
+		if grep -Eq 'undefined (reference to|symbol)' $$base.err; \
+		then echo unlinked; else echo broken; fi > $@; \
 	else echo ok > $@; fi; $(call lc_tick,probe $*)
 
 # ----- Hidden probes (strict mode): must the header hide it? -----

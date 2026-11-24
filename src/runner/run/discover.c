@@ -10,7 +10,7 @@
  * @file discover.c
  * @brief Discovery of a run: sources, units, tests, probe results.
  * @Created: 2026/11/24 08:14:52 by Moutig
- * @Updated: 2026/11/24 08:20:51 by Moutig
+ * @Updated: 2026/11/24 10:29:36 by Moutig
  *
  * Finds the sources of the suites (any group folder), the units the
  * target selects (and the <category>/defs.c of each of its headers), asks
@@ -30,28 +30,66 @@
 #include <time.h>
 #include <unistd.h>
 
+/** Bytes of a build log kept for the report (the rest is in the .err). */
+#define LC_LOG_MAX	65536
+
 /**
- * @brief The first lines of a file (build log of an unavailable unit).
+ * @brief The start of a file (build log of an unavailable unit).
  *
- * @param path     File.
- * @param maxLines Lines to keep.
- * @return New string, or NULL if the file cannot be read.
+ * @param path File.
+ * @return New string (at most LC_LOG_MAX bytes), or NULL if the file
+ *         cannot be read.
  */
-static char	*readHead(const char *path, int maxLines)
+static char	*readLog(const char *path)
 {
 	FILE	*fp = fopen(path, "r");
-	char	line[512];
+	char	buf[4096];
 	char	*s = NULL;
-	int		n = 0;
+	size_t	total = 0;
+	size_t	n;
 
 	if (fp == NULL)
 		return (NULL);
-	while (n < maxLines && fgets(line, sizeof(line), fp))
+	while (total < LC_LOG_MAX && (n = fread(buf, 1, sizeof(buf), fp)) > 0)
 	{
-		strAppend(&s, line, strlen(line));
-		n++;
+		if (n > LC_LOG_MAX - total)
+			n = LC_LOG_MAX - total;
+		strAppend(&s, buf, n);
+		total += n;
 	}
 	fclose(fp);
+	return (s);
+}
+
+/**
+ * @brief What went wrong in a build log: the lines that say "error"
+ *        (compiler, linker, LTO), at most @p maxLines; the first lines of
+ *        the log when none does.
+ *
+ * @param log      Build log, or NULL.
+ * @param maxLines Lines to keep.
+ * @return New string, or NULL for a NULL or empty log.
+ */
+static char	*logErrors(const char *log, int maxLines)
+{
+	char	*s = NULL;
+	int		n = 0;
+
+	for (int pass = 0; pass < 2 && s == NULL; pass++)
+		for (const char *p = log; p && *p && n < maxLines; )
+		{
+			const char	*nl = strchr(p, '\n');
+			size_t		len = nl ? (size_t)(nl - p) + 1 : strlen(p);
+			char		line[1024];
+
+			snprintf(line, sizeof(line), "%.*s", (int)len, p);
+			if (pass == 1 || strstr(line, "error:") || strstr(line, "undefined reference"))
+			{
+				strAppend(&s, p, len);
+				n++;
+			}
+			p += len;
+		}
 	return (s);
 }
 
@@ -425,7 +463,8 @@ static void	readProbes(t_run *r)
 			continue ;
 		if (fscanf(fp, "%31s", word) == 1)
 			r->probes[i] = !strcmp(word, "ok") ? PR_OK
-				: !strcmp(word, "unlinked") ? PR_UNLINKED : PR_UNDECLARED;
+				: !strcmp(word, "unlinked") ? PR_UNLINKED
+				: !strcmp(word, "broken") ? PR_BROKEN : PR_UNDECLARED;
 		fclose(fp);
 	}
 	r->nRejects = specRejects(&r->spec, &r->o.target, &r->rejects);
@@ -462,7 +501,8 @@ void	discover(t_run *r)
 		else
 		{
 			snprintf(path, sizeof(path), "%s/%s.err", r->o.binDir, u->rel);
-			u->err = readHead(path, 6);
+			u->log = readLog(path);
+			u->err = logErrors(u->log, 6);
 		}
 	}
 	qsort(r->tests, r->nTests, sizeof(t_test), cmpTest);

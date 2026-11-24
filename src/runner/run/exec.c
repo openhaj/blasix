@@ -10,7 +10,7 @@
  * @file exec.c
  * @brief The process pool that runs the tests.
  * @Created: 2026/11/24 08:15:05 by Moutig
- * @Updated: 2026/11/24 08:21:18 by Moutig
+ * @Updated: 2026/11/24 10:31:01 by Moutig
  *
  * Each test runs as `bin --run FUNC NAME` in a fresh process (its own
  * process group), with:
@@ -34,6 +34,7 @@
 #include <fnmatch.h>
 #include <poll.h>
 #include <signal.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,10 +78,21 @@ typedef struct s_slot
 const char	*statusName(t_status st)
 {
 	static const char	*names[ST_COUNT] = {
-		"pass", "fail", "skip", "crash", "timeout", "error", "unavailable"
+		"pass", "fail", "skip", "unimplemented", "crash", "timeout", "error",
+		"unavailable"
 	};
 
 	return (names[st]);
+}
+
+int	statusFailed(t_status st)
+{
+	return (st == ST_FAIL || st == ST_CRASH || st == ST_TIMEOUT || st == ST_ERROR);
+}
+
+int	statusRan(t_status st)
+{
+	return (st == ST_PASS || statusFailed(st));
 }
 
 /**
@@ -211,7 +223,7 @@ static void	unescape(char *s)
 /**
  * @brief Turn the fd-3 event stream into the test's counters and messages.
  *
- * "@fail", "@skip" and "@log" become lines of t->msgs; "@end" gives
+ * "@fail", "@skip", "@unimpl" and "@log" become lines of t->msgs; "@end" gives
  * the status, the number of checks and of failures. Unknown lines are
  * ignored. Consumes s->ev (strtok_r).
  *
@@ -246,13 +258,16 @@ static void	parseEvents(t_slot *s)
 			snprintf(buf, sizeof(buf), "%s:%s: %s\n", f[1], f[2], f[3]);
 		else if (!strcmp(f[0], "@skip") && n >= 2)
 			snprintf(buf, sizeof(buf), "skipped: %s\n", f[1]);
+		else if (!strcmp(f[0], "@unimpl") && n >= 2)
+			snprintf(buf, sizeof(buf), "not implemented: %s\n", f[1]);
 		else if (!strcmp(f[0], "@log") && n >= 2)
 			snprintf(buf, sizeof(buf), "log: %s\n", f[1]);
 		else if (!strcmp(f[0], "@end") && n >= 4)
 		{
 			s->ended = 1;
 			s->endSt = !strcmp(f[1], "pass") ? ST_PASS
-				: !strcmp(f[1], "skip") ? ST_SKIP : ST_FAIL;
+				: !strcmp(f[1], "skip") ? ST_SKIP
+				: !strcmp(f[1], "unimplemented") ? ST_UNIMPL : ST_FAIL;
 			t->asserts = atoi(f[2]);
 			t->failed = atoi(f[3]);
 			continue ;
@@ -497,7 +512,7 @@ void	runAll(t_run *r)
 			if (s->outFd >= 0)
 				close(s->outFd);
 			finish(s, wst, &ru);
-			failed += (s->t->st != ST_PASS && s->t->st != ST_SKIP);
+			failed += (size_t)statusFailed(s->t->st);
 			s->pid = 0;
 			active--;
 			done++;

@@ -10,7 +10,7 @@
  * @file locale_t_same.h
  * @brief locale_t of a header is the one of <locale.h>.
  * @Created: 2026/11/24 07:37:21 by Moutig
- * @Updated: 2026/11/24 08:32:02 by Moutig
+ * @Updated: 2026/11/24 10:27:57 by Moutig
  *
  * Included last by a defs.c (it includes <locale.h> when it exists, which
  * could make visible what the header under test must define itself).
@@ -47,7 +47,7 @@ TEST_SYM(locale_t__same, "locale_t", same_as_locale_h, .ref = "XBD <locale.h>")
 	EXPECT_TYPE(&newlocale, locale_t (*)(int, const char *, locale_t));
 	EXPECT_TRUE(global != (locale_t)0);
 #  else
-	SKIP("no LC_GLOBAL_LOCALE: <locale.h> missing or incomplete");
+	NOT_IMPLEMENTED("LC_GLOBAL_LOCALE (<locale.h> missing or incomplete)");
 #  endif
 }
 

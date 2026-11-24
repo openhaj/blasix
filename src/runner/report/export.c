@@ -10,11 +10,13 @@
  * @file export.c
  * @brief Results of a run as TSV and JSON.
  * @Created: 2026/11/24 08:14:32 by Moutig
- * @Updated: 2026/11/24 08:20:37 by Moutig
+ * @Updated: 2026/11/24 10:29:41 by Moutig
  *
  * TSV: one row per test, plus @interface, @hidden and @reject:<id> rows
  * (read back by --compare). JSON: every field, the target, the mode, every
- * interface, hidden probe and reject probe.
+ * unit that did not build (with why and its log), every required
+ * interface with its probe, tests and verdict, the conformance counters of
+ * each header (the console table), every hidden and reject probe.
  */
 
 #include "runner/lcrun.h"
@@ -31,7 +33,7 @@
  */
 static const char	*probeName(t_probe p)
 {
-	static const char	*n[] = {"unprobed", "present", "undeclared", "unlinked"};
+	static const char	*n[] = {"unprobed", "present", "undeclared", "unlinked", "broken"};
 
 	return (n[p]);
 }
@@ -153,6 +155,10 @@ int	reportJson(const t_run *r, const char *path)
 		jsonStr(fp, t->ref);
 		fprintf(fp, ", \"since\": ");
 		jsonStr(fp, t->since);
+		fprintf(fp, ", \"until\": ");
+		jsonStr(fp, t->until);
+		fprintf(fp, ", \"unit\": ");
+		jsonStr(fp, t->unit ? t->unit->rel : NULL);
 		fprintf(fp, "}%s\n", i + 1 < r->nTests ? "," : "");
 	}
 	fprintf(fp, "  ],\n  \"unavailable\": [");
@@ -164,8 +170,12 @@ int	reportJson(const t_run *r, const char *path)
 		jsonStr(fp, r->units[i].cat);
 		fprintf(fp, ", \"function\": ");
 		jsonStr(fp, r->units[i].func);
-		fprintf(fp, ", \"error\": ");
+		fprintf(fp, ", \"unit\": ");
+		jsonStr(fp, r->units[i].rel);
+		fprintf(fp, ", \"reason\": \"%s\", \"error\": ", unitReason(r, &r->units[i]));
 		jsonStr(fp, r->units[i].err);
+		fprintf(fp, ", \"log\": ");
+		jsonStr(fp, r->units[i].log);
 		fprintf(fp, "}");
 	}
 	fprintf(fp, "\n  ],\n  \"interfaces\": [");
@@ -174,18 +184,49 @@ int	reportJson(const t_run *r, const char *path)
 		const t_entry	*e = &r->spec.v[i];
 		int				ob;
 		t_req			q = specRequired(e, &r->o.target, &ob);
+		t_iresult		x;
 
-		if (!reqSelected(q))
+		if (!reqSelected(q) || interfaceFiltered(r, i))
 			continue ;
+		interfaceResult(r, i, &x);
 		fprintf(fp, "%s\n    {\"header\": ", k++ ? "," : "");
 		jsonStr(fp, e->header);
+		fprintf(fp, ", \"category\": ");
+		jsonStr(fp, e->cat);
 		fprintf(fp, ", \"name\": ");
 		jsonStr(fp, e->name);
-		fprintf(fp, ", \"since\": ");
+		fprintf(fp, ", \"kind\": \"%s\", \"since\": ", kindName(e->kind));
 		jsonStr(fp, e->since);
+		fprintf(fp, ", \"option\": ");
+		jsonStr(fp, q == REQ_OPTION ? e->opt : NULL);
 		fprintf(fp, ", \"requirement\": \"%s\", \"obsolescent\": %s, "
-			"\"probe\": \"%s\"}", reqName(q), ob ? "true" : "false",
+			"\"probe\": \"%s\", \"unit\": ", reqName(q), ob ? "true" : "false",
 			probeName(r->probes[i]));
+		jsonStr(fp, x.unit ? x.unit->rel : NULL);
+		fprintf(fp, ", \"built\": %s, \"tests\": %d, \"passed\": %d, \"failed\": %d, "
+			"\"skipped\": %d, \"unimplemented\": %d, \"verdict\": \"%s\"}",
+			x.unit == NULL ? "null" : x.unit->bin ? "true" : "false",
+			x.tests, x.passed, x.failed, x.skipped, x.unimpl, verdictName(x.verdict));
+	}
+	/* the conformance table: one row per header, as the console prints it */
+	fprintf(fp, "\n  ],\n  \"conformance\": [");
+	for (size_t i = 0, k = 0, next; i < r->spec.n; i = next)
+	{
+		t_conf	c;
+
+		next = confHeader(r, i, &c);
+		if (c.req == 0 && c.leak == 0 && c.nodiag == 0)
+			continue ;
+		fprintf(fp, "%s\n    {\"header\": ", k++ ? "," : "");
+		jsonStr(fp, r->spec.v[i].header);
+		fprintf(fp, ", \"category\": ");
+		jsonStr(fp, r->spec.v[i].cat);
+		fprintf(fp, ", \"required\": %d, \"option\": %d, \"obsolescent\": %d, "
+			"\"present\": %d, \"undeclared\": %d, \"unlinked\": %d, \"broken\": %d, "
+			"\"unprobed\": %d, \"tested\": %d, \"verified\": %d, \"failing\": %d, "
+			"\"unbuilt\": %d, \"untested\": %d, \"leaked\": %d, \"nodiag\": %d}",
+			c.req, c.opt, c.ob, c.ok, c.undecl, c.unlinked, c.broken, c.unknown,
+			c.tested, c.pass, c.fail, c.unbuilt, c.untested, c.leak, c.nodiag);
 	}
 	/* strict mode: the interfaces that must be hidden, and whether they are */
 	fprintf(fp, "\n  ],\n  \"mode\": \"%s\",\n  \"hidden\": [", r->o.lax ? "lax" : "strict");

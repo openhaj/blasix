@@ -10,35 +10,21 @@
  * @file conformance.c
  * @brief Conformance table: per header, what the target requires.
  * @Created: 2026/11/24 08:14:13 by Moutig
- * @Updated: 2026/11/24 08:20:22 by Moutig
+ * @Updated: 2026/11/24 10:28:32 by Moutig
  *
  * For each header: required interfaces, probe results (declared, linked,
  * leaked, refused), tests run and passed, with the lists of the missing,
- * leaked, failing and untested ones.
+ * leaked, failing, unbuilt and untested ones. The verdict of each
+ * interface (interfaceResult()) and the counters of each header
+ * (confHeader()) are also what the JSON results say.
  */
 
 #include "runner/lcrun.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/** Counters of one row of the conformance table (a header). */
-typedef struct s_conf
-{
-	int	req;		/* required interfaces (base + options + extensions) */
-	int	opt;		/* of which in an option group */
-	int	ob;			/* of which obsolescent */
-	int	ok;			/* declared and linkable */
-	int	undecl;		/* header does not declare it */
-	int	unlinked;	/* declared, library does not define it */
-	int	unknown;	/* not probed */
-	int	tested;		/* at least one test ran */
-	int	pass;		/* tested, every test passed */
-	int	fail;		/* tested, a test did not pass */
-	int	leak;		/* must be hidden (strict mode), visible anyway */
-	int	nodiag;		/* reject probes that compiled (diagnostic missing) */
-}	t_conf;
 
 /**
  * @brief Add a name to a list of the conformance table ("a, b, c").
@@ -125,6 +111,9 @@ static void	confAdd(t_conf *to, const t_conf *c)
 	to->ok += c->ok;
 	to->undecl += c->undecl;
 	to->unlinked += c->unlinked;
+	to->broken += c->broken;
+	to->unbuilt += c->unbuilt;
+	to->untested += c->untested;
 	to->unknown += c->unknown;
 	to->tested += c->tested;
 	to->pass += c->pass;
@@ -133,34 +122,242 @@ static void	confAdd(t_conf *to, const t_conf *c)
 	to->nodiag += c->nodiag;
 }
 
+int	interfaceFiltered(const t_run *r, size_t i)
+{
+	const t_entry	*e = &r->spec.v[i];
+
+	return (!inList(r->o.cats, e->cat) || !inList(r->o.funcs, e->name));
+}
+
+const char	*verdictName(t_verdict v)
+{
+	static const char	*n[VD_COUNT] = {
+		"missing", "broken", "failing", "verified", "unbuilt", "untested"
+	};
+
+	return (n[v]);
+}
+
 /**
- * @brief Is @p e left out by -c / -f?
+ * @brief The unit that tests @p e: its own (<cat>/.../<name>.c), else
+ *        <cat>/defs for a type or a constant.
  *
  * @param r Run.
  * @param e Entry.
- * @return 1 if filtered out, 0 if shown.
+ * @return The unit, or NULL when there is none in this run.
  */
-static int	catFiltered(const t_run *r, const t_entry *e)
+static const t_unit	*interfaceUnit(const t_run *r, const t_entry *e)
 {
-	if (r->o.cats)
-	{
-		int	in = 0;
+	const t_unit	*defs = NULL;
 
-		for (char **c = r->o.cats; *c; c++)
-			in |= !strcmp(*c, e->cat);
-		if (!in)
-			return (1);
+	for (size_t i = 0; i < r->nUnits; i++)
+	{
+		const t_unit	*u = &r->units[i];
+
+		if (strcmp(u->cat, e->cat))
+			continue ;
+		if (!strcmp(u->func, e->name))
+			return (u);
+		if (!strcmp(u->func, "defs"))
+			defs = u;
 	}
-	if (r->o.funcs)
-	{
-		int	in = 0;
+	return (specIsDef(e, 0) ? defs : NULL);
+}
 
-		for (char **f = r->o.funcs; *f; f++)
-			in |= !strcmp(*f, e->name);
-		if (!in)
+/**
+ * @brief Does the build log of a unit say that @p name is missing?
+ *
+ * "'name' undeclared", "implicit declaration of function 'name'",
+ * "unknown type name 'name'", "undefined reference to `name'", with the
+ * quotes of GCC (ASCII or UTF-8) and clang.
+ *
+ * @param log  Build log, or NULL.
+ * @param name Interface.
+ * @return 1 or 0.
+ */
+static int	logSaysMissing(const char *log, const char *name)
+{
+	size_t	len = strlen(name);
+
+	for (const char *p = log ? strstr(log, name) : NULL; p; p = strstr(p + 1, name))
+	{
+		const char	*eol = strchr(p, '\n');
+		const char	*bol = p;
+		char		line[512];
+		size_t		n;
+
+		if ((p > log && (isalnum((unsigned char)p[-1]) || p[-1] == '_'))
+			|| isalnum((unsigned char)p[len]) || p[len] == '_')
+			continue ;
+		while (bol > log && bol[-1] != '\n')
+			bol--;
+		n = (size_t)((eol ? eol : p + strlen(p)) - bol);
+		if (n >= sizeof(line))
+			n = sizeof(line) - 1;
+		memcpy(line, bol, n);
+		line[n] = '\0';
+		if (strstr(line, "undeclared") || strstr(line, "implicit declaration")
+			|| strstr(line, "unknown type name") || strstr(line, "undefined reference")
+			|| strstr(line, "undefined symbol") || strstr(line, "use of undeclared"))
 			return (1);
 	}
 	return (0);
+}
+
+const char	*unitReason(const t_run *r, const t_unit *u)
+{
+	if (u->entry)
+	{
+		for (size_t i = 0; i < r->spec.n; i++)
+		{
+			if (&r->spec.v[i] != u->entry && r->spec.v[i].alt != u->entry)
+				continue ;
+			if (r->probes[i] == PR_UNDECLARED || r->probes[i] == PR_UNLINKED)
+				return ("unimplemented");
+			if (r->probes[i] != PR_UNKNOWN)
+				return ("build");
+			break ;
+		}
+		if (logSaysMissing(u->log, u->func))
+			return ("unimplemented");
+	}
+	return ("build");
+}
+
+void	interfaceResult(const t_run *r, size_t i, t_iresult *x)
+{
+	const t_entry	*e = &r->spec.v[i];
+	t_probe			p = r->probes[i];
+
+	memset(x, 0, sizeof(*x));
+	x->unit = interfaceUnit(r, e);
+	for (size_t k = 0; k < r->nTests; k++)
+	{
+		const t_test	*t = &r->tests[k];
+
+		if (strcmp(t->cat, e->cat) || strcmp(t->func, e->name))
+			continue ;
+		x->tests++;
+		x->passed += (t->st == ST_PASS);
+		x->failed += statusFailed(t->st);
+		x->skipped += (t->st == ST_SKIP);
+		x->unimpl += (t->st == ST_UNIMPL);
+	}
+	if (p == PR_UNDECLARED || p == PR_UNLINKED)
+		x->verdict = VD_MISSING;
+	else if (p == PR_BROKEN)
+		x->verdict = VD_BROKEN;
+	else if (x->failed)
+		x->verdict = VD_FAILING;
+	else if (x->passed)
+		x->verdict = VD_VERIFIED;
+	else if (x->unit && x->unit->bin == NULL)
+		x->verdict = !strcmp(unitReason(r, x->unit), "unimplemented") && x->unit->entry
+			? VD_MISSING : VD_UNBUILT;
+	else
+		x->verdict = VD_UNTESTED;
+}
+
+/** Names listed under a row of the console table. */
+typedef struct s_lists
+{
+	char	*undecl, *unlinked, *broken, *fail, *unbuilt, *untested, *leak, *nodiag;
+	int		nUndecl, nUnlinked, nBroken, nFail, nUnbuilt, nUntested, nLeak, nNodiag;
+}	t_lists;
+
+/**
+ * @brief Counters (and, for the console, lists) of one header.
+ *
+ * @param r Run.
+ * @param i First entry of the header.
+ * @param c Filled in.
+ * @param l Lists to fill, or NULL.
+ * @return Index of the first entry of the next header.
+ */
+static size_t	confCompute(const t_run *r, size_t i, t_conf *c, t_lists *l)
+{
+	const char	*cat = r->spec.v[i].cat;
+	int			v = r->o.verbose;
+	size_t		j;
+
+	memset(c, 0, sizeof(*c));
+	if (l)
+		memset(l, 0, sizeof(*l));
+	for (j = i; j < r->spec.n && !strcmp(r->spec.v[j].cat, cat); j++)
+	{
+		const t_entry	*e = &r->spec.v[j];
+		int				ob;
+		t_req			q = specRequired(e, &r->o.target, &ob);
+		t_iresult		x;
+
+		if (interfaceFiltered(r, j))
+			continue ;
+		if (r->hidden[j] == HID_LEAKED)
+		{
+			c->leak++;
+			if (l)
+				listAdd(&l->leak, &l->nLeak, e->name, v);
+		}
+		if (!reqSelected(q))
+			continue ;
+		c->req++;
+		c->opt += (q == REQ_OPTION);
+		c->ob += ob;
+		switch (r->probes[j])
+		{
+			case PR_OK: c->ok++; break ;
+			case PR_UNDECLARED: c->undecl++;
+				if (l)
+					listAdd(&l->undecl, &l->nUndecl, e->name, v);
+				break ;
+			case PR_UNLINKED: c->unlinked++;
+				if (l)
+					listAdd(&l->unlinked, &l->nUnlinked, e->name, v);
+				break ;
+			case PR_BROKEN: c->broken++;
+				if (l)
+					listAdd(&l->broken, &l->nBroken, e->name, v);
+				break ;
+			default: c->unknown++; break ;
+		}
+		interfaceResult(r, j, &x);
+		c->tested += (x.passed + x.failed > 0);
+		switch (x.verdict)
+		{
+			case VD_VERIFIED: c->pass++; break ;
+			case VD_FAILING: c->fail++;
+				if (l)
+					listAdd(&l->fail, &l->nFail, e->name, v);
+				break ;
+			case VD_UNBUILT: c->unbuilt++;
+				if (l)
+					listAdd(&l->unbuilt, &l->nUnbuilt, e->name, v);
+				break ;
+			case VD_UNTESTED: c->untested++;
+				if (l)
+					listAdd(&l->untested, &l->nUntested, e->name, v);
+				break ;
+			default: break ;
+		}
+	}
+	for (size_t k = 0; k < r->nRejects; k++)
+		if (!strcmp(r->rejects[k].cat, cat) && r->rejects[k].st == REJ_ACCEPTED
+			&& inList(r->o.cats, cat))
+		{
+			char	what[160];
+
+			snprintf(what, sizeof(what), "%s %d then %d (%s)", r->rejects[k].want,
+				r->rejects[k].first, r->rejects[k].second, r->rejects[k].ref);
+			c->nodiag++;
+			if (l)
+				listAdd(&l->nodiag, &l->nNodiag, what, v);
+		}
+	return (j);
+}
+
+size_t	confHeader(const t_run *r, size_t i, t_conf *c)
+{
+	return (confCompute(r, i, c, NULL));
 }
 
 void	sectionConformance(const t_run *r)
@@ -179,84 +376,22 @@ void	sectionConformance(const t_run *r)
 		"pass", "fail", "present", "verified", C_RESET);
 	for (i = 0; i < r->spec.n; i = j)
 	{
-		const char	*cat = r->spec.v[i].cat;
-		t_conf		c;
-		char		*lUndecl = NULL, *lUnlinked = NULL, *lFail = NULL, *lUntested = NULL;
-		char		*lLeak = NULL, *lNodiag = NULL;
-		int			nUndecl = 0, nUnlinked = 0, nFail = 0, nUntested = 0, nLeak = 0;
-		int			nNodiag = 0;
+		t_conf	c;
+		t_lists	l;
+		int		v = r->o.verbose;
 
-		memset(&c, 0, sizeof(c));
-		for (j = i; j < r->spec.n && !strcmp(r->spec.v[j].cat, cat); j++)
-		{
-			const t_entry	*e = &r->spec.v[j];
-			int				ob;
-			t_req			q = specRequired(e, &r->o.target, &ob);
-			int				nt = 0;
-			int				np = 0;
-
-			if (catFiltered(r, e))
-				continue ;
-			if (r->hidden[j] == HID_LEAKED)
-			{
-				c.leak++;
-				listAdd(&lLeak, &nLeak, e->name, r->o.verbose);
-			}
-			if (!reqSelected(q))
-				continue ;
-			c.req++;
-			c.opt += (q == REQ_OPTION);
-			c.ob += ob;
-			switch (r->probes[j])
-			{
-				case PR_OK: c.ok++; break ;
-				case PR_UNDECLARED: c.undecl++;
-					listAdd(&lUndecl, &nUndecl, e->name, r->o.verbose); break ;
-				case PR_UNLINKED: c.unlinked++;
-					listAdd(&lUnlinked, &nUnlinked, e->name, r->o.verbose); break ;
-				default: c.unknown++; break ;
-			}
-			for (size_t k = 0; k < r->nTests; k++)
-			{
-				if (strcmp(r->tests[k].cat, cat) || strcmp(r->tests[k].func, e->name))
-					continue ;
-				nt++;
-				np += (r->tests[k].st == ST_PASS || r->tests[k].st == ST_SKIP);
-			}
-			if (nt)
-			{
-				c.tested++;
-				if (np == nt)
-					c.pass++;
-				else
-				{
-					c.fail++;
-					listAdd(&lFail, &nFail, e->name, r->o.verbose);
-				}
-			}
-			else if (r->probes[j] != PR_UNDECLARED && r->probes[j] != PR_UNLINKED)
-				listAdd(&lUntested, &nUntested, e->name, r->o.verbose);
-		}
-		for (size_t k = 0; k < r->nRejects; k++)
-			if (!strcmp(r->rejects[k].cat, cat) && r->rejects[k].st == REJ_ACCEPTED
-				&& inList(r->o.cats, cat))
-			{
-				char	what[160];
-
-				snprintf(what, sizeof(what), "%s %d then %d (%s)", r->rejects[k].want,
-					r->rejects[k].first, r->rejects[k].second, r->rejects[k].ref);
-				c.nodiag++;
-				listAdd(&lNodiag, &nNodiag, what, r->o.verbose);
-			}
+		j = confCompute(r, i, &c, &l);
 		if (c.req == 0 && c.leak == 0 && c.nodiag == 0)
 			continue ;
 		confRow(r->spec.v[i].header, &c);
-		listPrint("undeclared", lUndecl, nUndecl, r->o.verbose);
-		listPrint("leaked", lLeak, nLeak, r->o.verbose);
-		listPrint("accepted", lNodiag, nNodiag, r->o.verbose);
-		listPrint("not linked", lUnlinked, nUnlinked, r->o.verbose);
-		listPrint("failing", lFail, nFail, r->o.verbose);
-		listPrint("untested", lUntested, nUntested, r->o.verbose);
+		listPrint("undeclared", l.undecl, l.nUndecl, v);
+		listPrint("leaked", l.leak, l.nLeak, v);
+		listPrint("accepted", l.nodiag, l.nNodiag, v);
+		listPrint("not linked", l.unlinked, l.nUnlinked, v);
+		listPrint("link error", l.broken, l.nBroken, v);
+		listPrint("failing", l.fail, l.nFail, v);
+		listPrint("not built", l.unbuilt, l.nUnbuilt, v);
+		listPrint("untested", l.untested, l.nUntested, v);
 		confAdd(&tot, &c);
 	}
 	printf("  %s\n", "--------------------------------------------------------"
@@ -270,7 +405,8 @@ void	sectionConformance(const t_run *r)
 		" (strict mode; LAX=1 skips it)."
 		"\n  nodiag: a translation unit the standard requires to be refused compiled"
 		" (reject probes)."
-		"\n  verified: tested and every test passed.%s\n", C_DIM, C_RESET);
+		"\n  tested: at least one test ran (skipped and not implemented ones did not)."
+		"\n  verified: tests ran and every one passed.%s\n", C_DIM, C_RESET);
 	if (tot.unknown == tot.req)
 		printf("  %sno probe results (run through make, or pass -P DIR)%s\n",
 			C_DIM, C_RESET);

@@ -1,72 +1,88 @@
 #!/bin/sh
-# cov-report.sh SRC_DIR OBJ_DIR DUMP_DIR OUT_DIR
+# cov-report.sh ROOT OBJ_DIR DUMP_DIR OUT_DIR [REAL_ROOT]
 #
-# DUMP_DIR holds one tree per test process (DUMP_DIR/<pid>/<abs path>.gcda,
-# written by src/framework/cov.c). They are merged with gcov-tool, the result
-# is copied next to the objects of the libc under test (where the .gcno
-# are), then gcov gives the line coverage per directory and in total.
-# With gcovr installed, OUT_DIR/index.html is written too.
+# Line, function and branch coverage of a libc built with coverage
+# counters, for EVERY file compiled into it, run or not.
+#
+#   ROOT       the tree the libc was compiled in (relative source paths of
+#              the .gcno are relative to it);
+#   OBJ_DIR    where its objects and .gcno are;
+#   DUMP_DIR   one tree per test process (DUMP_DIR/<pid>/<abs path>.gcda,
+#              written by src/framework/cov.c);
+#   OUT_DIR    the report;
+#   REAL_ROOT  the path the report names the sources by (the coverage
+#              build is a copy of the sources: the originals); default ROOT.
+#
+# The profiles are merged with gcov-tool and copied next to the .gcno; then
+# every object that has a .gcno goes through gcov: one that no test linked
+# or ran has no .gcda and counts as never executed (0%), so the total is
+# over the whole library, not only over what the tests happened to call.
+#
+# OUT_DIR gets:
+#   lcov.info   lcov tracefile (lines, functions, branches; SF under
+#               REAL_ROOT), for genhtml, editors, CI services, ...;
+#   lines.tsv   <path relative to ROOT> <percent> <lines>, one per file;
+#   html/       genhtml's report, when genhtml (lcov) is installed.
 set -eu
-src=$1
-obj=$2
+root=$(cd "$1" && pwd)
+obj=$(cd "$2" && pwd)
 dump=$3
 out=$4
+real=${5:-$root}
+here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$out"
 
+command -v gcov >/dev/null || { echo "coverage: gcov not found" >&2; exit 1; }
 command -v gcov-tool >/dev/null || { echo "coverage: gcov-tool not found" >&2; exit 1; }
-set -- "$dump"/*/
-if [ ! -d "$1" ]; then
-	echo "coverage: nothing under $dump (did the tests run?)" >&2
+
+find "$obj" -name '*.gcno' | sort > "$out/gcno.list"
+if [ ! -s "$out/gcno.list" ]; then
+	echo "coverage: no .gcno under $obj (was the libc built with coverage?)" >&2
 	exit 1
 fi
-echo "  COV      merging $# profiles"
-acc="$out/merged"
-rm -rf "$acc"
-cp -r "$1" "$acc"
-shift
-for d in "$@"; do
-	gcov-tool merge -o "$acc.tmp" "$acc" "$d" >/dev/null 2>&1 \
-		&& { rm -rf "$acc"; mv "$acc.tmp" "$acc"; } \
-		|| rm -rf "$acc.tmp"
-done
+
+# ----- merge the profiles of every test process -----
 find "$obj" -name '*.gcda' -delete
-(cd "$acc" && find . -name '*.gcda') | while read -r f; do
-	cp "$acc/$f" "/${f#./}"
-done
-
-find "$obj" -name '*.gcda' > "$out/gcda.list" || true
-if [ ! -s "$out/gcda.list" ]; then
-	echo "coverage: no .gcda under $obj (did the tests run?)" >&2
-	exit 1
+acc="$out/merged"
+rm -rf "$acc" "$acc.tmp"
+set -- "$dump"/*/
+if [ -d "$1" ]; then
+	echo "  COV      merging $# profiles"
+	cp -r "$1" "$acc"
+	shift
+	for d in "$@"; do
+		gcov-tool merge -o "$acc.tmp" "$acc" "$d" >/dev/null 2>&1 \
+			&& { rm -rf "$acc"; mv "$acc.tmp" "$acc"; } \
+			|| rm -rf "$acc.tmp"
+	done
+	(cd "$acc" && find . -name '*.gcda') | while read -r f; do
+		cp "$acc/$f" "/${f#./}"
+	done
+else
+	echo "coverage: no profile under $dump (did the tests run?): everything at 0%" >&2
 fi
 
-: > "$out/lines.tsv"
-while read -r gcda; do
-	o=${gcda%.gcda}.o
-	rel=${o#"$obj"/}
-	c="$src/${rel%.o}.c"
-	[ -f "$c" ] || continue
-	# "Lines executed:83.33% of 12" for the source file itself
-	gcov -n -o "$(dirname "$o")" "$c" 2>/dev/null \
-	| awk -v f="${rel%.o}.c" '
-		/^File / { cur = $2; gsub(/\x27/, "", cur) }
-		/^Lines executed:/ && index(cur, f) {
-			split($2, a, ":"); sub(/%/, "", a[2]);
-			printf "%s\t%s\t%s\n", f, a[2], $4; exit }' >> "$out/lines.tsv"
-done < "$out/gcda.list"
+# ----- every object, with or without a .gcda -----
+echo "  COV      $(wc -l < "$out/gcno.list") objects, $(find "$obj" -name '*.gcda' | wc -l) run"
+(cd "$root" && xargs gcov -t -b -c < "$out/gcno.list" 2>/dev/null) \
+	| awk -v root="$root" -v real="$real" -v tsv="$out/lines.tsv" \
+		-f "$here/gcov2lcov.awk" > "$out/lcov.info"
 
+# ----- summary per directory (src/<dir>, include/<dir>) -----
 awk -F'\t' '
 	{ n = split($1, p, "/"); d = (n > 2) ? p[1] "/" p[2] : p[1];
 	  hit = $2 * $3 / 100; H[d] += hit; N[d] += $3; TH += hit; TN += $3 }
 	END {
 		printf "\n  %-28s %8s %8s %8s\n", "directory", "lines", "hit", "cover"
-		for (d in N) printf "  %-28s %8d %8d %7.1f%%\n", d, N[d], H[d], 100 * H[d] / N[d] | "sort"
+		for (d in N) printf "  %-28s %8d %8d %7.1f%%\n", d, N[d], H[d], N[d] ? 100 * H[d] / N[d] : 0 | "sort"
 		close("sort")
 		printf "  %-28s %8d %8d %7.1f%%\n", "TOTAL", TN, TH, TN ? 100 * TH / TN : 0
 	}' "$out/lines.tsv"
-echo "  per-file data: $out/lines.tsv"
+echo "  lcov tracefile: $out/lcov.info"
+echo "  per-file data:  $out/lines.tsv"
 
-if command -v gcovr >/dev/null 2>&1; then
-	gcovr -r "$src" --object-directory "$obj" --html-details -o "$out/index.html" >/dev/null 2>&1 \
-		&& echo "  html report:   $out/index.html"
+if command -v genhtml >/dev/null 2>&1; then
+	rm -rf "$out/html"
+	genhtml -q --branch-coverage --prefix "$real" -o "$out/html" "$out/lcov.info" >/dev/null 2>&1 \
+		&& echo "  html report:    $out/html/index.html"
 fi

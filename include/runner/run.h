@@ -10,7 +10,7 @@
  * @file run.h
  * @brief A run: units, tests, results, and how they are found and run (run/).
  * @Created: 2026/11/24 08:28:05 by Moutig
- * @Updated: 2026/11/24 08:29:15 by Moutig
+ * @Updated: 2026/11/24 10:25:14 by Moutig
  *
  * run/discover.c  sources of the suites, units of the target, their
  *                 tests, probe results;
@@ -32,7 +32,8 @@ typedef enum e_status
 {
 	ST_PASS,		/* Every check passed (and the expected outcome happened). */
 	ST_FAIL,		/* A check failed, or the expected exit / signal did not. */
-	ST_SKIP,		/* The test called SKIP. */
+	ST_SKIP,		/* The test called SKIP (environment: no other locale, ...). */
+	ST_UNIMPL,		/* The test called NOT_IMPLEMENTED: the libc lacks what it needs. */
 	ST_CRASH,		/* Killed by an unexpected signal. */
 	ST_TIMEOUT,		/* Killed after its timeout. */
 	ST_ERROR,		/* The process ended before the end of the test. */
@@ -47,6 +48,8 @@ typedef enum e_probe
 	PR_OK,			/* Declared by the header and provided by the library. */
 	PR_UNDECLARED,	/* Not declared by the header (or macro / type missing). */
 	PR_UNLINKED,	/* Declared, but the library does not define it. */
+	PR_BROKEN,		/* Declared, but the link failed for another reason than an
+					   undefined symbol (compiler crash, broken archive, ...). */
 }	t_probe;
 
 /** Result of the hidden probe of one interface (<probedir>/<cat>/<name>.hidden). */
@@ -66,7 +69,9 @@ typedef struct s_unit
 							   <cat>[/<group>...]/<func>; also the path of
 							   the binary under BINDIR. */
 	char			*bin;	/* NULL if the binary does not exist. */
-	char			*err;	/* First lines of the build log if unavailable. */
+	char			*err;	/* If unavailable: the error lines of the build log
+							   (or its first lines when none says "error"). */
+	char			*log;	/* If unavailable: the build log (first 64 KiB). */
 	const t_entry	*entry;	/* Spec entry, NULL if unknown. */
 }	t_unit;
 
@@ -95,7 +100,7 @@ typedef struct s_test
 	int			failed;		/* Checks failed (from @end). */
 	int			sig;		/* Signal that killed it, 0 otherwise. */
 	int			code;		/* Exit status, -1 if killed. */
-	char		*msgs;		/* @fail / @skip / @log lines, formatted. */
+	char		*msgs;		/* @fail / @skip / @unimpl / @log lines, formatted. */
 	char		*out;		/* Captured stdout + stderr (truncated). */
 }	t_test;
 
@@ -149,6 +154,22 @@ typedef struct s_run
  * @return Static string.
  */
 const char	*statusName(t_status st);
+/**
+ * @brief Is @p st a failure: fail, crash, timeout or error?
+ *
+ * Skipped and not implemented tests are not failures (they did not run).
+ *
+ * @param st Status.
+ * @return 1 or 0.
+ */
+int			statusFailed(t_status st);
+/**
+ * @brief Did a test with status @p st run: pass or a failure?
+ *
+ * @param st Status.
+ * @return 1 or 0.
+ */
+int			statusRan(t_status st);
 /**
  * @brief Split a comma list ("a,b,c") into a NULL-terminated array.
  *

@@ -12,7 +12,9 @@
 #   LIBC_LAX_CFLAGS  (optional) lax mode only, LAX=1: macros that make the
 #                    headers expose everything they have, so that a function
 #                    a strict target hides is still tested
-#   LIBC_COV_SUPPORTED / LIBC_COV_PREPARE / LIBC_COV_REPORT (optional)
+#   LIBC_COV_SUPPORTED / LIBC_COV_PREPARE / LIBC_COV_REPORT (optional):
+#                    coverage support, see mk/libc/hajlibc.mk; with COV=1
+#                    libc-prepare builds the instrumented libc
 
 LIBC_CC			:= $(HOST_CC)
 LIBC_CPPFLAGS	:=

@@ -10,7 +10,7 @@
  * @file lc.c
  * @brief Test-side engine: checks, output protocol, main().
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/24 05:12:43 by Moutig
+ * @Updated: 2026/11/24 10:28:08 by Moutig
  *
  * Linked into every test binary, compiled against the libc under
  * test but calling none of its functions (see sys.c).
@@ -29,8 +29,9 @@
  *     @test  CAT FUNC NAME FILE LINE TIMEOUT EXPECT SINCE UNTIL OPT REF  (--list)
  *     @fail  FILE LINE MESSAGE
  *     @skip  REASON
+ *     @unimpl WHAT                (NOT_IMPLEMENTED: the libc lacks it)
  *     @log   MESSAGE
- *     @end   pass|fail|skip ASSERTS FAILED
+ *     @end   pass|fail|skip|unimplemented ASSERTS FAILED
  *
  * Without fd 3 (a binary run by hand, e.g. under a debugger) the same
  * information is printed for humans on stderr.
@@ -67,6 +68,7 @@ static int					gEscape;	/* escape \t \n \\ while writing a field */
 static int					gAsserts;	/* checks run by the current test */
 static int					gFailed;	/* checks failed by the current test */
 static int					gSkipped;	/* the current test called SKIP */
+static int					gUnimpl;	/* the current test called NOT_IMPLEMENTED */
 
 /* ----- Output (own buffer, raw write) ----- */
 
@@ -537,6 +539,25 @@ void	lc_skip(const char *reason)
 	lcFlush();
 }
 
+void	lc_unimplemented(const char *what)
+{
+	gUnimpl = 1;
+	if (gProto)
+	{
+		lcs("@unimpl\t");
+		gEscape = 1;
+		lcs(what);
+		gEscape = 0;
+	}
+	else
+	{
+		lcs("    N/I  ");
+		lcs(what);
+	}
+	lcc('\n');
+	lcFlush();
+}
+
 void	lc_log(const char *msg)
 {
 	if (gProto)
@@ -574,12 +595,12 @@ static void	lcField(const char *s)
  * @brief Run one test body and report its result.
  *
  * Resets the per-test counters, calls the body, then writes "@end" (for
- * lcrun) or a PASS / FAIL / SKIP line (for humans). A body that exits
+ * lcrun) or a PASS / FAIL / SKIP / N/I line (for humans). A body that exits
  * or dies never reaches the report: lcrun judges it by the process
  * status against the test's `expect`.
  *
  * @param t Test to run.
- * @return 1 if a check failed, 0 otherwise (pass or skip).
+ * @return 1 if a check failed, 0 otherwise (pass, skip, not implemented).
  */
 static int	lcRunOne(const struct lc_test *t)
 {
@@ -588,8 +609,9 @@ static int	lcRunOne(const struct lc_test *t)
 	gAsserts = 0;
 	gFailed = 0;
 	gSkipped = 0;
+	gUnimpl = 0;
 	t->fn();
-	status = gFailed ? "fail" : gSkipped ? "skip" : "pass";
+	status = gFailed ? "fail" : gUnimpl ? "unimplemented" : gSkipped ? "skip" : "pass";
 	if (gProto)
 	{
 		lcs("@end\t");
@@ -602,7 +624,7 @@ static int	lcRunOne(const struct lc_test *t)
 	}
 	else
 	{
-		lcs(gFailed ? "  FAIL  " : gSkipped ? "  SKIP  " : "  PASS  ");
+		lcs(gFailed ? "  FAIL  " : gUnimpl ? "  N/I   " : gSkipped ? "  SKIP  " : "  PASS  ");
 		lcs(t->category);
 		lcc('/');
 		lcs(t->function);

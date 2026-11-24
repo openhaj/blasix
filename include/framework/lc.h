@@ -10,7 +10,7 @@
  * @file lc.h
  * @brief Test-side API: TEST, EXPECT_*, ASSERT_*, helpers.
  * @Created: 2026/11/23 04:44:31 by Moutig
- * @Updated: 2026/11/24 05:13:13 by Moutig
+ * @Updated: 2026/11/24 08:49:58 by Moutig
  *
  * One test file = one function of the libc under test:
  *
@@ -284,6 +284,19 @@ int		lc_checkMem(const char	*file,	int			line,	const char	*text,
 void	lc_skip(const char *reason);
 
 /**
+ * @brief Mark the current test as not implemented (use NOT_IMPLEMENTED,
+ *        which also returns).
+ *
+ * For a test that cannot run because the libc lacks something it needs
+ * (setlocale(), newlocale(), <locale.h>, ...): a gap of the libc, reported
+ * apart from SKIP, which is for the environment (no other locale
+ * installed, no guarded mapping, not an ASCII execution character set).
+ *
+ * @param what What is missing: shown in the report.
+ */
+void	lc_unimplemented(const char *what);
+
+/**
  * @brief Attach a message to the current test (use LOG).
  *
  * @param msg Message, shown with -v and on failure.
@@ -417,6 +430,9 @@ void	lc_log(const char *msg);
 
 /** Mark the test as skipped and leave the body. */
 # define SKIP(reason)			do { lc_skip(reason); return; } while (0)
+
+/** Mark the test as not implemented by the libc and leave the body. */
+# define NOT_IMPLEMENTED(what)	do { lc_unimplemented(what); return; } while (0)
 
 /** Attach a message to the test result (shown with -v and on failure). */
 # define LOG(msg)				lc_log(msg)

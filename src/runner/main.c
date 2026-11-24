@@ -10,7 +10,7 @@
  * @file main.c
  * @brief lcrun: entry point, one command per invocation.
  * @Created: 2026/11/24 08:25:41 by Moutig
- * @Updated: 2026/11/24 08:26:17 by Moutig
+ * @Updated: 2026/11/24 08:49:58 by Moutig
  *
  * Parses the command line (cli.c), loads the spec database (spec/), then
  * runs the command: a spec tool (tools/), or a run: discover the units
@@ -101,7 +101,7 @@ int	main(int argc, char **argv)
 			"(see above)\n", r.nBadVersion, r.nBadVersion == 1 ? "" : "s");
 	bad = r.nBadVersion > 0;
 	for (size_t i = 0; i < r.nTests; i++)
-		if (r.tests[i].st != ST_PASS && r.tests[i].st != ST_SKIP)
+		if (statusFailed(r.tests[i].st))
 			bad = 1;
 	for (size_t i = 0; i < r.spec.n; i++)
 		if (r.hidden[i] == HID_LEAKED && inList(r.o.cats, r.spec.v[i].cat)
