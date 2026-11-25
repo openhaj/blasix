@@ -10,7 +10,7 @@
  * @file sys.c
  * @brief Raw Linux syscalls for the framework.
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/25 08:00:38 by Moutig
+ * @Updated: 2026/11/25 08:18:14 by Moutig
  *
  * Every system call of the framework goes through lc_syscall3 /
  * lc_syscall6, a few lines of inline asm per architecture, so that the
@@ -19,7 +19,9 @@
  *
  * Path syscalls use their *at() form with AT_FDCWD: aarch64 (like every
  * recent Linux port) has no open, mkdir or unlink, only openat,
- * mkdirat and unlinkat, and the *at() form works on x86_64 too.
+ * mkdirat and unlinkat, and the *at() form works on x86_64 too. For
+ * the same reason pipe, dup2 and fork go through pipe2, dup3 and
+ * clone on both architectures.
  *
  * To add an architecture: its syscall numbers (LC_NR_*, from the
  * kernel's unistd.h for that arch) and the two lc_syscallN functions
@@ -51,6 +53,14 @@
 # define LC_NR_TGKILL		234
 # define LC_NR_RT_SIGACTION	13
 # define LC_NR_RT_SIGRETURN	15
+# define LC_NR_READ			0
+# define LC_NR_LSEEK		8
+# define LC_NR_PIPE2		293
+# define LC_NR_DUP3			292
+# define LC_NR_CLONE		56
+# define LC_NR_WAIT4		61
+# define LC_NR_KILL			62
+# define LC_NR_GETPPID		110
 
 /*
  * Signal return trampoline. The x86_64 kernel refuses to deliver a
@@ -145,6 +155,14 @@ static long	lc_syscall6(long nr, long a, long b, long c, long d, long e, long f)
 # define LC_NR_GETTID		178
 # define LC_NR_TGKILL		131
 # define LC_NR_RT_SIGACTION	134
+# define LC_NR_READ			63
+# define LC_NR_LSEEK		62
+# define LC_NR_PIPE2		59
+# define LC_NR_DUP3			24
+# define LC_NR_CLONE		220
+# define LC_NR_WAIT4		260
+# define LC_NR_KILL			129
+# define LC_NR_GETPPID		173
 
 /* aarch64 returns through the vDSO trampoline: no SA_RESTORER needed. */
 # define LC_SA_RESTORER		0UL
@@ -302,4 +320,59 @@ long	lc_sysSigaction(int sig, void (*handler)(int), unsigned long flags)
 	act.mask = 0;
 	return (lc_syscall6(LC_NR_RT_SIGACTION, sig, (long)&act, 0,
 			(long)sizeof(act.mask), 0, 0));
+}
+
+long	lc_sysRead(int fd, void *buf, unsigned long n)
+{
+	return (lc_syscall3(LC_NR_READ, fd, (long)buf, (long)n));
+}
+
+long	lc_sysLseek(int fd, long off, int whence)
+{
+	return (lc_syscall3(LC_NR_LSEEK, fd, off, whence));
+}
+
+long	lc_sysPipe(int fds[2], int flags)
+{
+	return (lc_syscall3(LC_NR_PIPE2, (long)fds, flags, 0));
+}
+
+long	lc_sysDup2(int oldfd, int newfd)
+{
+	long	r;
+
+	if (oldfd == newfd)
+	{
+		r = lc_sysFcntl(oldfd, LC_F_GETFD, 0);
+		return (r < 0 ? r : newfd);
+	}
+	return (lc_syscall3(LC_NR_DUP3, oldfd, newfd, 0));
+}
+
+/** Signal sent to the parent when the child ends. */
+#define LC_SIGCHLD	17
+
+/*
+ * clone(SIGCHLD, 0, ...) is fork(): no new stack (0 = share the
+ * caller's, copied on write), no tid or tls pointer. x86_64 and aarch64
+ * order the last three arguments differently; they are all 0 here.
+ */
+long	lc_sysFork(void)
+{
+	return (lc_syscall6(LC_NR_CLONE, LC_SIGCHLD, 0, 0, 0, 0, 0));
+}
+
+long	lc_sysWait4(long pid, int *status, int options)
+{
+	return (lc_syscall6(LC_NR_WAIT4, pid, (long)status, options, 0, 0, 0));
+}
+
+long	lc_sysKill(long pid, int sig)
+{
+	return (lc_syscall3(LC_NR_KILL, pid, sig, 0));
+}
+
+long	lc_sysGetppid(void)
+{
+	return (lc_syscall3(LC_NR_GETPPID, 0, 0, 0));
 }
