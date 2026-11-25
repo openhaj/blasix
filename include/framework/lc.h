@@ -10,7 +10,7 @@
  * @file lc.h
  * @brief Test-side API: TEST, EXPECT_*, ASSERT_*, helpers.
  * @Created: 2026/11/23 04:44:31 by Moutig
- * @Updated: 2026/11/25 08:32:21 by Moutig
+ * @Updated: 2026/11/25 08:40:42 by Moutig
  *
  * One test file = one function of the libc under test:
  *
@@ -572,6 +572,40 @@ long	lc_captureEnd(lc_capture *c, char *buf, lc_size_t size);
  *         -errno if the child could not be created.
  */
 int		lc_child(void (*body)(void *), void *arg);
+
+/** Nanoseconds in one second, for lc_now() and lc_sleep(). */
+# define LC_NS_PER_SEC	1000000000LL
+
+/**
+ * @brief Monotonic time, without the libc under test.
+ *
+ * For timing what the libc does (nanosleep, sleep, *_timedwait): the
+ * difference of two calls is the elapsed time, whatever the wall clock
+ * does in between.
+ *
+ * @return Nanoseconds since an arbitrary start (CLOCK_MONOTONIC).
+ */
+long long	lc_now(void);
+
+/**
+ * @brief Wall-clock time, without the libc under test.
+ *
+ * The reference for time(), gettimeofday() and clock_gettime(
+ * CLOCK_REALTIME) of the libc.
+ *
+ * @return Nanoseconds since the Epoch (CLOCK_REALTIME).
+ */
+long long	lc_nowReal(void);
+
+/**
+ * @brief Sleep at least @p ns nanoseconds, without the libc under test.
+ *
+ * Sleeps until a monotonic deadline, so a signal handler that
+ * interrupts the sleep does not shorten it.
+ *
+ * @param ns Duration (<= 0: return at once).
+ */
+void		lc_sleep(long long ns);
 
 /**
  * @brief End the process now (exit_group).

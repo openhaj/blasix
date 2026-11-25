@@ -10,7 +10,7 @@
  * @file sys.h
  * @brief Raw Linux syscalls used by the framework (x86_64, aarch64).
  * @Created: 2026/11/23 04:18:40 by Moutig
- * @Updated: 2026/11/25 08:32:45 by Moutig
+ * @Updated: 2026/11/25 08:40:54 by Moutig
  *
  * The framework must not depend on the libc under test: these are the
  * only "system" functions it uses. They return what the kernel returns
@@ -237,6 +237,34 @@ long	lc_sysGetppid(void);
  */
 long	lc_sysPrctl(int op, unsigned long arg);
 
+/** Kernel struct timespec (64-bit: two longs). */
+struct lc_timespec
+{
+	long	sec;
+	long	nsec;
+};
+
+/**
+ * @brief clock_gettime(2), always the syscall (not the vDSO).
+ *
+ * @param clk LC_CLOCK_REALTIME or LC_CLOCK_MONOTONIC.
+ * @param ts  Receives the time.
+ * @return 0, or -errno.
+ */
+long	lc_sysClockGettime(int clk, struct lc_timespec *ts);
+
+/**
+ * @brief clock_nanosleep(2).
+ *
+ * @param clk   Clock to sleep on.
+ * @param flags 0 (relative) or LC_TIMER_ABSTIME.
+ * @param req   Duration, or end time with LC_TIMER_ABSTIME.
+ * @param rem   Receives what is left when interrupted (may be NULL).
+ * @return 0, or -errno (-EINTR: a handler ran).
+ */
+long	lc_sysClockNanosleep(int clk, int flags, const struct lc_timespec *req,
+			struct lc_timespec *rem);
+
 /* ----- Constants (Linux values, same on x86_64 and aarch64) ----- */
 
 /** fcntl command: get the descriptor flags (used to probe fd 3). */
@@ -277,6 +305,13 @@ long	lc_sysPrctl(int op, unsigned long arg);
 
 /** prctl: signal received when the parent dies. */
 # define LC_PR_SET_PDEATHSIG	1
+
+/** Clocks of clock_gettime / clock_nanosleep. */
+# define LC_CLOCK_REALTIME	0
+# define LC_CLOCK_MONOTONIC	1
+
+/** clock_nanosleep flag: @p req is an absolute time. */
+# define LC_TIMER_ABSTIME	1
 
 /** Signal numbers (same on x86_64 and aarch64). */
 # define LC_SIGKILL		9

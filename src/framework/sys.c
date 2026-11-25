@@ -10,7 +10,7 @@
  * @file sys.c
  * @brief Raw Linux syscalls for the framework.
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/25 08:35:25 by Moutig
+ * @Updated: 2026/11/25 08:41:11 by Moutig
  *
  * Every system call of the framework goes through lc_syscall3 /
  * lc_syscall6, a few lines of inline asm per architecture, so that the
@@ -62,6 +62,8 @@
 # define LC_NR_KILL			62
 # define LC_NR_GETPPID		110
 # define LC_NR_PRCTL		157
+# define LC_NR_CLOCK_GETTIME	228
+# define LC_NR_CLOCK_NANOSLEEP	230
 
 /*
  * Signal return trampoline. The x86_64 kernel refuses to deliver a
@@ -165,6 +167,8 @@ static long	lc_syscall6(long nr, long a, long b, long c, long d, long e, long f)
 # define LC_NR_KILL			129
 # define LC_NR_GETPPID		173
 # define LC_NR_PRCTL		167
+# define LC_NR_CLOCK_GETTIME	113
+# define LC_NR_CLOCK_NANOSLEEP	115
 
 /* aarch64 returns through the vDSO trampoline: no SA_RESTORER needed. */
 # define LC_SA_RESTORER		0UL
@@ -400,4 +404,16 @@ long	lc_sysGetppid(void)
 long	lc_sysPrctl(int op, unsigned long arg)
 {
 	return (lc_syscall6(LC_NR_PRCTL, op, (long)arg, 0, 0, 0, 0));
+}
+
+long	lc_sysClockGettime(int clk, struct lc_timespec *ts)
+{
+	return (lc_syscall3(LC_NR_CLOCK_GETTIME, clk, (long)ts, 0));
+}
+
+long	lc_sysClockNanosleep(int clk, int flags, const struct lc_timespec *req,
+			struct lc_timespec *rem)
+{
+	return (lc_syscall6(LC_NR_CLOCK_NANOSLEEP, clk, flags, (long)req,
+			(long)rem, 0, 0));
 }

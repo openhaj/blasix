@@ -10,7 +10,7 @@
  * @file lc.c
  * @brief Test-side engine: checks, output protocol, main().
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/25 08:34:52 by Moutig
+ * @Updated: 2026/11/25 08:41:04 by Moutig
  *
  * Linked into every test binary, compiled against the libc under
  * test but calling none of its functions (see sys.c).
@@ -41,7 +41,7 @@
  * strings are formatted here too.
  */
 
-#define LC_FRAMEWOR
+#define LC_FRAMEWORK
 #include "framework/lc.h"
 #include "framework/sys.h"
 
@@ -500,6 +500,46 @@ int	lc_child(void (*body)(void *), void *arg)
 	if ((st & 0x7f) == 0)
 		return (LC_EXIT((st >> 8) & 0xff));
 	return (LC_SIGNAL(st & 0x7f));
+}
+
+/**
+ * @brief Read a clock in nanoseconds.
+ *
+ * @param clk LC_CLOCK_REALTIME or LC_CLOCK_MONOTONIC.
+ * @return Nanoseconds, or 0 if the clock cannot be read.
+ */
+static long long	lcClockNs(int clk)
+{
+	struct lc_timespec	ts;
+
+	if (lc_sysClockGettime(clk, &ts) != 0)
+		return (0);
+	return (ts.sec * LC_NS_PER_SEC + ts.nsec);
+}
+
+long long	lc_now(void)
+{
+	return (lcClockNs(LC_CLOCK_MONOTONIC));
+}
+
+long long	lc_nowReal(void)
+{
+	return (lcClockNs(LC_CLOCK_REALTIME));
+}
+
+void	lc_sleep(long long ns)
+{
+	struct lc_timespec	end;
+	long long			t;
+
+	if (ns <= 0)
+		return ;
+	t = lc_now() + ns;
+	end.sec = (long)(t / LC_NS_PER_SEC);
+	end.nsec = (long)(t % LC_NS_PER_SEC);
+	while (lc_sysClockNanosleep(LC_CLOCK_MONOTONIC, LC_TIMER_ABSTIME,
+			&end, 0) == -4)	/* -EINTR: same deadline, sleep again */
+		;
 }
 
 /* ----- Failure reporting ----- */
