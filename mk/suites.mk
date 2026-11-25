@@ -114,9 +114,11 @@ inttypes_HDRS := \
 
 stdlib_UNITS := \
 	defs \
+	memory/aligned_alloc \
 	memory/calloc \
 	memory/free \
 	memory/malloc \
+	memory/posix_memalign \
 	memory/realloc \
 
 stdlib_HDRS := \
