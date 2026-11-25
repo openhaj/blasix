@@ -16,6 +16,13 @@
 #       -I$(INC_DIR), with header dependencies (-MMD -MP). CC_VAR and
 #       FLAGS_VAR are variable names, expanded when the rule runs (so
 #       target-specific values and commas in flags work).
+#   $(call lc_write_cmd,FILE,TEXT)
+#       write TEXT to FILE only if FILE holds something else (no shell,
+#       expanded in a recipe). A target that depends on FILE is rebuilt
+#       when TEXT changes (its command line, its flags), not on every run.
+#   $(call lc_update,NEW,FILE)
+#       shell: replace FILE by NEW only if their contents differ, so that
+#       an unchanged FILE keeps its date; NEW is removed.
 #
 # Modules append the .d files of their objects to DEPS; the Makefile
 # includes them at the end.
@@ -38,6 +45,15 @@ LC_TOTAL	?= 0
 lc_tick		= $(if $(LC_PROGRESS),n=$$(printf . >> $(LC_PROGRESS) && wc -c < $(LC_PROGRESS)); \
 	scripts/progress.sh $$n $(LC_TOTAL) '$(1)' '$(2)',$(if $(2),echo '$(2)',:))
 lc_clear	= if [ -t 1 ]; then printf '\r\033[2K'; fi
+
+lc_streq		= $(and $(findstring $(1),$(2)),$(findstring $(2),$(1)))
+lc_write_cmd	= $(if $(call lc_streq,$(file <$(1)),$(2)),,$(shell \
+	mkdir -p $(dir $(1)))$(file >$(1),$(2)))
+lc_update		= if cmp -s $(1) $(2); then rm -f $(1); else mv -f $(1) $(2); fi
+
+# Prerequisite of the command files: their rule runs on every make.
+.PHONY: FORCE
+FORCE:
 
 DEPS	:=
 

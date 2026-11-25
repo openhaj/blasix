@@ -54,9 +54,20 @@ ifeq ($(filter $(NO_SPEC_GOALS),$(MAKECMDGOALS)),)
 include $(SPEC_MK)
 endif
 
-$(SPEC_MK): $(RUNNER) $(SPECS) $(SUITES)
-	@mkdir -p $(@D)
-	@$(RUNNER) $(LCTARGET) $(LCPATHS) --spec-make > $@.tmp && mv $@.tmp $@
+# Regenerated when lcrun, a spec or a unit changes, but rewritten only
+# if its content changed: every unit depends on it (through its command
+# file), so an unchanged spec.mk must keep its date. The stamp records
+# when it was last checked.
+lc_spec_gen	= mkdir -p $(OUT) && \
+	$(RUNNER) $(LCTARGET) $(LCPATHS) --spec-make > $(SPEC_MK).tmp && \
+	$(call lc_update,$(SPEC_MK).tmp,$(SPEC_MK))
+
+$(SPEC_MK).stamp: $(RUNNER) $(SPECS) $(SUITES)
+	@$(lc_spec_gen)
+	@touch $@
+
+$(SPEC_MK): $(SPEC_MK).stamp
+	@test -f $@ || { $(lc_spec_gen); }
 
 # ----- Filtered by CAT / FUNC -----
 
