@@ -10,7 +10,7 @@
  * @file stpcpy.c
  * @brief Tests for stpcpy() (<string.h>).
  * @Created: 2026/11/24 05:18:32 by Moutig
- * @Updated: 2026/11/24 05:48:44 by Moutig
+ * @Updated: 2026/11/25 02:45:34 by Moutig
  *
  * stpcpy() (POSIX.1-2008) copies the string s2, terminating NUL included,
  * into s1 like strcpy(), and returns a pointer to the terminating NUL
@@ -67,6 +67,70 @@ TEST_OPT(every_size, .ref = "POSIX stpcpy() DESCRIPTION")
 			|| dst[1 + len] != '\0' || dst[2 + len] != 'x')
 			bad = len;
 	}
+	EXPECT_EQ(bad, -1);
+}
+
+/*
+ * A source string that crosses a 4 KiB boundary: every source start
+ * before it and every destination alignment.
+ */
+TEST_OPT(string_crossing_page_boundary, .ref = "POSIX stpcpy() DESCRIPTION")
+{
+	char	*page = lc_guarded(8192);
+	char	dst[128];
+	int		bad = -1;
+
+	if (!page)
+		SKIP("no guarded mapping");
+	for (int start = 1; start <= 40 && bad < 0; start++)
+		for (int d = 0; d < 8 && bad < 0; d++)
+		{
+			char	*src = page + 4096 - start;
+			int		len = start + 40;
+
+			for (int i = 0; i < len; i++)
+				src[i] = (char)('a' + i % 26);
+			src[len] = '\0';
+			lc_fill(dst, 'x', sizeof(dst));
+			if (stpcpy(dst + d, src) != dst + d + len)
+				bad = start * 8 + d;
+			for (int i = 0; i < (int)sizeof(dst) && bad < 0; i++)
+			{
+				int		j = i - d;
+				char	want = (j < 0 || j > len) ? 'x' : (j == len ? '\0' : src[j]);
+
+				if (dst[i] != want)
+					bad = start * 8 + d;
+			}
+		}
+	EXPECT_EQ(bad, -1);
+}
+
+/* The terminating null character on the last byte before an inaccessible page. */
+TEST_OPT(string_ending_at_page_end, .ref = "POSIX stpcpy() DESCRIPTION")
+{
+	char	*end = lc_guarded(128);
+	char	dst[96];
+	int		bad = -1;
+
+	if (!end)
+		SKIP("no guarded mapping");
+	end += 128;
+	for (int len = 0; len <= 80 && bad < 0; len++)
+		for (int d = 0; d < 8 && bad < 0; d++)
+		{
+			char	*src = end - 1 - len;
+
+			for (int i = 0; i < len; i++)
+				src[i] = (char)('a' + i % 26);
+			src[len] = '\0';
+			lc_fill(dst, 'x', sizeof(dst));
+			if (stpcpy(dst + d, src) != dst + d + len || dst[d + len + 1] != 'x')
+				bad = len * 8 + d;
+			for (int i = 0; i <= len && bad < 0; i++)
+				if (dst[d + i] != src[i])
+					bad = len * 8 + d;
+		}
 	EXPECT_EQ(bad, -1);
 }
 

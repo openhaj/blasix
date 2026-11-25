@@ -10,7 +10,7 @@
  * @file strrchr.c
  * @brief Tests for strrchr() (<string.h>).
  * @Created: 2026/11/24 05:24:27 by Moutig
- * @Updated: 2026/11/24 06:13:17 by Moutig
+ * @Updated: 2026/11/25 02:45:17 by Moutig
  *
  * strrchr() locates the last c (converted to char) in the string s; the
  * terminating null character is part of the string. Null pointer if c is
@@ -83,6 +83,28 @@ TEST_OPT(every_length_and_position, .ref = "C11 7.24.5.5p2")
 				if (len > 0)
 					buf[off] = (p < len) ? 'Q' : 'x';
 				if (strrchr(buf + off, 'Q') != (p < len ? buf + off + p : NULL))
+					bad = (off * 65 + len) * 65 + p;
+			}
+	EXPECT_EQ(bad, -1);
+}
+
+/*
+ * Only bytes equal to c match: c among bytes of value c ^ 1 (here 'Q'
+ * among 'P'), at every position, length and alignment.
+ */
+TEST_OPT(only_bytes_equal_to_c_match, .ref = "C11 7.24.5.5p2")
+{
+	char	buf[80];
+	int		bad = -1;
+
+	for (int off = 0; off < 8 && bad < 0; off++)
+		for (int len = 1; len <= 64 && bad < 0; len++)
+			for (int p = 0; p < len && bad < 0; p++)
+			{
+				lc_fill(buf, 'P', sizeof(buf));
+				buf[off + len] = '\0';
+				buf[off + p] = 'Q';
+				if (strrchr(buf + off, 'Q') != buf + off + p)
 					bad = (off * 65 + len) * 65 + p;
 			}
 	EXPECT_EQ(bad, -1);
