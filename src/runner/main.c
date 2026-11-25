@@ -10,7 +10,7 @@
  * @file main.c
  * @brief lcrun: entry point, one command per invocation.
  * @Created: 2026/11/24 08:25:41 by Moutig
- * @Updated: 2026/11/24 11:55:26 by Moutig
+ * @Updated: 2026/11/25 09:21:07 by Moutig
  *
  * Parses the command line (cli.c), loads the spec database (spec/), then
  * runs the command: a spec tool (tools/), or a run: discover the units
@@ -89,7 +89,9 @@ int	main(int argc, char **argv)
 		return (0);
 	}
 	r.wallMs = nowMs();
+	cacheLoad(&r);
 	runAll(&r);
+	cacheSave(&r);
 	r.wallMs = nowMs() - r.wallMs;
 	addVirtualResults(&r);
 	reportConsole(&r);

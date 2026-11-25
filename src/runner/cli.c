@@ -10,7 +10,7 @@
  * @file cli.c
  * @brief Command line of lcrun: usage and options.
  * @Created: 2026/11/24 08:25:17 by Moutig
- * @Updated: 2026/11/24 08:26:14 by Moutig
+ * @Updated: 2026/11/25 09:21:04 by Moutig
  *
  * Every option fills t_opts; the command (run, --spec-make, ...) is a
  * t_mode. --compare, --standards and --options are handled by main.c
@@ -63,6 +63,10 @@ static void	usage(void)
 "  -j N        parallel jobs                              [nproc]\n"
 "  -T SEC      default timeout per test                   [10]\n"
 "  -r N        run each test N times (flakiness)          [1]\n"
+"  -C FILE     result cache: reuse the result of a test whose binary,\n"
+"              timeout and run-time libc did not change    [none]\n"
+"  -K F,...    files the binaries load at run time (shared libc), part\n"
+"              of the cache key                           [none]\n"
 "report:\n"
 "  -L NAME     libc label                                 [?]\n"
 "  -v          verbose: every test, per-function table, full lists\n"
@@ -120,7 +124,7 @@ int	parseOpts(t_opts *o, int argc, char **argv, t_mode *mode,
 		}
 		else if (!strcmp(a, "-h") || !strcmp(a, "--help"))
 			return (usage(), -1);
-		else if (a[0] == '-' && a[1] && !a[2] && strchr("SOspPLcftjTroJ", a[1]))
+		else if (a[0] == '-' && a[1] && !a[2] && strchr("SOspPLcftjTroJCK", a[1]))
 		{
 			if (v == NULL)
 				return (usage(), -1);
@@ -149,6 +153,8 @@ int	parseOpts(t_opts *o, int argc, char **argv, t_mode *mode,
 				case 'r': o->repeat = atoi(v); break ;
 				case 'o': o->tsvOut = v; break ;
 				case 'J': o->jsonOut = v; break ;
+				case 'C': o->cacheFile = v; break ;
+				case 'K': o->libcFiles = splitList(v); break ;
 			}
 		}
 		else if (a[0] != '-' && o->binDir == NULL)

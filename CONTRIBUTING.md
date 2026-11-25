@@ -222,6 +222,32 @@ libc and target (`build/<libc>/<target>/`):
 `make clean` (this libc) or `make fclean` (everything) rebuilds from
 scratch.
 
+### The result cache
+
+lcrun keeps the last result of every test in
+`build/<libc>/<target>/cache.tsv` (`-C`, `src/runner/run/cache.c`) and
+does not run a test again while these did not change:
+
+- **the content of its binary** (a hash): the test, the framework and,
+  for a static libc, every libc object the unit links. A relink that
+  gives the same binary keeps the results;
+- **its timeout** (`.timeout`, `TIMEOUT=`);
+- **the run-time libc**, for a shared one: the files of `LIBC_RUNTIME`
+  (path, size, date, inode). A change drops the whole cache;
+- **lcrun itself** (it decides the statuses): a new lcrun drops it too.
+
+Only reproducible results are kept: `pass`, `fail`, `skip`,
+`unimplemented`, `crash`. A `timeout` or an `error` runs again. Running a
+subset (`CAT=`, `FUNC=`, `TEST=`) keeps the entries of the other units.
+The report says how many results come from the cache, `-v` marks them,
+and `results.json` has `"cached"` per test.
+
+A test that depends on something outside its binary (a file in `/tmp`,
+an installed locale, the time) is reused as long as its binary does not
+change: `CACHE=0` runs everything. The cache is not used with
+`REPEAT=n` (flakiness), nor for `make coverage` (the tests must run to
+write their counters).
+
 ## What a run measures
 
 ### Probes

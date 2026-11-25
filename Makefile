@@ -30,6 +30,9 @@
 #   make run CAT=string FUNC=strlen  only some units (comma lists)
 #   make run TEST='*/strlen/*' V=1   glob on cat/func/name, verbose
 #   make run REPEAT=20               flakiness (each test run 20 times)
+#   make run CACHE=0                 run every test, even those whose binary
+#                                    did not change (default: their last
+#                                    result is reused, build/<libc>/<target>/cache.tsv)
 #   make run-all                     the 8 standards, one line each
 #   make compare A=host B=hajlibc    same target, two libcs, what differs
 #   make coverage LIBC=hajlibc       line coverage of the libc sources
