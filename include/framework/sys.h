@@ -10,7 +10,7 @@
  * @file sys.h
  * @brief Raw Linux syscalls used by the framework (x86_64, aarch64).
  * @Created: 2026/11/23 04:18:40 by Moutig
- * @Updated: 2026/11/25 08:16:45 by Moutig
+ * @Updated: 2026/11/25 08:26:27 by Moutig
  *
  * The framework must not depend on the libc under test: these are the
  * only "system" functions it uses. They return what the kernel returns
@@ -224,6 +224,9 @@ long	lc_sysGetppid(void);
 
 /** fcntl command: get the descriptor flags (used to probe fd 3). */
 # define LC_F_GETFD		1
+
+/** fcntl command: lowest free descriptor >= arg, close-on-exec set. */
+# define LC_F_DUPFD_CLOEXEC	1030
 
 /** open flag: read only. */
 # define LC_O_RDONLY	00

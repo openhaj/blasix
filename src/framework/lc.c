@@ -10,7 +10,7 @@
  * @file lc.c
  * @brief Test-side engine: checks, output protocol, main().
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/25 08:00:24 by Moutig
+ * @Updated: 2026/11/25 08:26:41 by Moutig
  *
  * Linked into every test binary, compiled against the libc under
  * test but calling none of its functions (see sys.c).
@@ -353,6 +353,89 @@ char	*lc_tmpPath(char *buf, lc_size_t size, const char *tag)
 		buf[i++] = tag[j];
 	buf[i] = '\0';
 	return (buf);
+}
+
+/** First descriptor the capture may use for its own files. */
+#define LC_CAPTURE_MINFD	10
+
+/**
+ * @brief Move descriptor @p fd to a number >= LC_CAPTURE_MINFD.
+ *
+ * @param fd Descriptor (closed here).
+ * @return The new descriptor (close-on-exec), or -errno.
+ */
+static long	lcHighFd(long fd)
+{
+	long	r;
+
+	r = lc_sysFcntl((int)fd, LC_F_DUPFD_CLOEXEC, LC_CAPTURE_MINFD);
+	lc_sysClose((int)fd);
+	return (r);
+}
+
+int	lc_captureStart(lc_capture *c, int fd)
+{
+	char	path[64];
+	long	r;
+
+	c->fd = fd;
+	c->saved = -1;
+	r = lc_sysFcntl(fd, LC_F_DUPFD_CLOEXEC, LC_CAPTURE_MINFD);
+	if (r >= 0)
+		c->saved = (int)r;
+	else if (r != -9)	/* -EBADF: fd was closed, nothing to save */
+		return ((int)r);
+	lc_tmpPath(path, sizeof(path), "capture");
+	r = lc_sysOpen(path, LC_O_RDWR | LC_O_CREAT | LC_O_TRUNC | LC_O_CLOEXEC,
+			0600);
+	if (r >= 0)
+	{
+		lc_sysUnlink(path);
+		r = lcHighFd(r);
+	}
+	if (r >= 0)
+	{
+		c->file = (int)r;
+		r = lc_sysDup2(c->file, fd);
+		if (r >= 0)
+			return (0);
+		lc_sysClose(c->file);
+	}
+	if (c->saved >= 0)
+		lc_sysClose(c->saved);
+	return ((int)r);
+}
+
+long	lc_captureEnd(lc_capture *c, char *buf, lc_size_t size)
+{
+	long		len;
+	long		r;
+	lc_size_t	got;
+
+	if (c->saved >= 0)
+	{
+		lc_sysDup2(c->saved, c->fd);
+		lc_sysClose(c->saved);
+	}
+	else
+		lc_sysClose(c->fd);
+	len = lc_sysLseek(c->file, 0, LC_SEEK_END);
+	got = 0;
+	if (len >= 0 && size > 0)
+	{
+		r = lc_sysLseek(c->file, 0, LC_SEEK_SET);
+		while (r >= 0 && got + 1 < size)
+		{
+			r = lc_sysRead(c->file, buf + got, size - 1 - got);
+			if (r <= 0)
+				break ;
+			got += (lc_size_t)r;
+		}
+	}
+	if (size > 0)
+		buf[got] = '\0';
+	lc_sysClose(c->file);
+	return (len);
 }
 
 /* ----- Failure reporting ----- */

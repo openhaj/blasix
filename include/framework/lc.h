@@ -10,7 +10,7 @@
  * @file lc.h
  * @brief Test-side API: TEST, EXPECT_*, ASSERT_*, helpers.
  * @Created: 2026/11/23 04:44:31 by Moutig
- * @Updated: 2026/11/25 08:00:10 by Moutig
+ * @Updated: 2026/11/25 08:25:55 by Moutig
  *
  * One test file = one function of the libc under test:
  *
@@ -499,6 +499,53 @@ void	*lc_guarded(lc_size_t n);
  * @return 0 on success, -errno on failure.
  */
 int		lc_unlink(const char *path);
+
+/**
+ * @brief A descriptor redirected to a temporary file (lc_captureStart).
+ *
+ * Opaque to the test: pass it to lc_captureStart() and lc_captureEnd().
+ */
+typedef struct lc_capture
+{
+	int	fd;		/* the captured descriptor */
+	int	saved;	/* copy of what @c fd was before, -1 if it was closed */
+	int	file;	/* the temporary file (unlinked), read back at the end */
+}	lc_capture;
+
+/**
+ * @brief Redirect descriptor @p fd to a temporary file.
+ *
+ * Everything written to @p fd until lc_captureEnd() goes to an unlinked
+ * file (nothing stays in /tmp, even if the test crashes). For the
+ * functions whose contract is what they write: perror, psignal, the
+ * assert message, printf on stdout, ...
+ *
+ * The descriptors kept by the capture are >= 10 and close-on-exec, so
+ * they never take the number the test is about to use.
+ *
+ * @param c  Capture state, filled here.
+ * @param fd Descriptor to capture (1 or 2 usually; @p fd may be closed:
+ *           it is closed again at the end).
+ * @return 0, or -errno (nothing is redirected).
+ */
+int		lc_captureStart(lc_capture *c, int fd);
+
+/**
+ * @brief Put descriptor @p fd back and read what was written to it.
+ *
+ * A stdio stream of the libc under test keeps what it buffered: fflush
+ * it before this call, or the bytes are written after the capture.
+ * Checks made during the capture are reported normally (the report of a
+ * run by hand, on fd 2, may land in the capture).
+ *
+ * @param c    State filled by lc_captureStart().
+ * @param buf  Receives the captured bytes, NUL-terminated (truncated to
+ *             @p size - 1; captured NUL bytes are kept).
+ * @param size Size of @p buf (may be 0: only the length is returned).
+ * @return Number of bytes written to @p fd during the capture (larger
+ *         than @p size - 1 when truncated), or -errno.
+ */
+long	lc_captureEnd(lc_capture *c, char *buf, lc_size_t size);
 
 /**
  * @brief End the process now (exit_group).
