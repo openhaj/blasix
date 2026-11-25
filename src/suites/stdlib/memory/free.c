@@ -10,7 +10,7 @@
  * @file free.c
  * @brief Tests for free() (<stdlib.h>).
  * @Created: 2026/11/25 12:57:36 by Moutig
- * @Updated: 2026/11/25 13:05:04 by Moutig
+ * @Updated: 2026/11/25 14:04:00 by Moutig
  *
  * free() deallocates the space ptr points to, which becomes available for
  * further allocation; a null pointer causes no action. Any other argument
@@ -22,10 +22,15 @@
  * Only malloc() provides the blocks here: the pointers of calloc(),
  * realloc(), aligned_alloc() ... are freed in their own units.
  *
+ * Stress: frees from other threads, blocks that outlive their thread
+ * (POSIX threads, C11 7.22.3p1-2, XSH 2.9.1), and space freed then
+ * allocated again after a pause (an allocator may give it back to the
+ * system in between).
+ *
  * Clauses: C99 7.20.3.2; C11, C17 7.22.3.3; C23 7.24.3.3. POSIX: XSH
  * free().
  */
-#include "stdlib/stdlib_cases.h"
+#include "stdlib/stdlib_procs.h"
 
 TEST_OPT(prototype, .ref = "C11 7.22.3.3p1")
 {
@@ -144,6 +149,192 @@ TEST_OPT(errno_unchanged, .since = "POSIX.1-2024", .ref = "XSH free() (Issue 8)"
 	EXPECT_EQ(errno, EDOM);
 	free(big);
 	EXPECT_EQ(errno, EDOM);
+}
+
+/* ----- Stress: threads (stdlib_procs.h) and a pause ----- */
+
+# define F_PER	1500
+
+/** One thread of free_from_another_thread: the blocks it frees, its own count. */
+typedef struct s_fWorker
+{
+	void	**blocks;
+	int		bad;
+}	t_fWorker;
+
+/* Free F_PER blocks of the main thread, allocating and freeing its own between. */
+static void	*crossFreeWorker(void *arg)
+{
+	t_fWorker	*w = arg;
+
+	for (int i = 0; i < F_PER && !w->bad; i++)
+	{
+		void	*own = malloc((size_t)(i % 300) + 1);
+
+		if (own == NULL)
+			w->bad = i + 1;
+		free(w->blocks[i]);
+		w->blocks[i] = NULL;
+		free(own);
+	}
+	return (NULL);
+}
+
+/*
+ * Blocks the main thread allocated are freed by 8 other threads; the
+ * blocks it keeps are untouched, and the space can be allocated again.
+ */
+TEST_OPT(free_from_another_thread, .since = "POSIX.1-2008", .ref = "C11 7.22.3p2; XSH 2.9.1")
+{
+	static void		*b[8][F_PER];
+	static void		*keep[F_PER];
+	static size_t	n[F_PER];
+	t_fWorker		w[8];
+	int				bad = -1;
+
+	for (int i = 0; i < F_PER; i++)
+	{
+		n[i] = sl_sizes(i * 13 % 1112);
+		keep[i] = malloc(n[i]);
+		ASSERT_NOTNULL(keep[i]);
+		sl_fill(keep[i], n[i], (unsigned)i);
+		for (int t = 0; t < 8; t++)
+		{
+			b[t][i] = malloc(sl_sizes((i + t * 7) % 1100));
+			ASSERT_NOTNULL(b[t][i]);
+		}
+	}
+	for (int t = 0; t < 8; t++)
+	{
+		w[t].blocks = b[t];
+		w[t].bad = 0;
+	}
+	SL_THREADS(8, crossFreeWorker, w);
+	for (int t = 0; t < 8; t++)
+		EXPECT_EQ(w[t].bad, 0);
+	for (int i = 0; i < F_PER && bad < 0; i++)
+		if (!sl_check(keep[i], n[i], (unsigned)i))
+			bad = i;
+	for (int i = 0; i < F_PER; i++)
+		free(keep[i]);
+	for (int i = 0; i < 8 * F_PER && bad < 0; i++)
+	{
+		void	*p = malloc(sl_sizes(i % 1100));
+
+		if (p == NULL)
+			bad = 10000 + i;
+		b[i / F_PER][i % F_PER] = p;
+	}
+	for (int i = 0; i < 8 * F_PER; i++)
+		free(b[i / F_PER][i % F_PER]);
+	EXPECT_EQ(bad, -1);
+}
+
+# define O_PER	200
+
+/** One thread of blocks_outlive_their_thread: what it allocated. */
+typedef struct s_oWorker
+{
+	unsigned	id;
+	void		*p[O_PER];
+	size_t		n[O_PER];
+	int			bad;
+}	t_oWorker;
+
+/* Allocate O_PER blocks with the thread's pattern, and exit without freeing them. */
+static void	*leaveBlocksWorker(void *arg)
+{
+	t_oWorker	*w = arg;
+
+	for (int i = 0; i < O_PER; i++)
+	{
+		w->n[i] = sl_sizes((i * 11 + (int)w->id) % (i % 20 ? 1100 : 1118));
+		w->p[i] = malloc(w->n[i]);
+		if (w->p[i] == NULL)
+		{
+			w->bad = i + 1;
+			return (NULL);
+		}
+		sl_fill(w->p[i], w->n[i], w->id * O_PER + (unsigned)i);
+	}
+	return (NULL);
+}
+
+/*
+ * The lifetime of a block lasts until it is deallocated, not until its
+ * thread ends: 3 rounds of 8 threads that allocate and exit; every block
+ * of every round still holds its pattern, then the main thread frees them.
+ */
+TEST_OPT(blocks_outlive_their_thread, .since = "POSIX.1-2008", .ref = "C11 7.22.3p1")
+{
+	static t_oWorker	w[3][8];
+	int					bad = -1;
+
+	for (int r = 0; r < 3; r++)
+	{
+		for (int t = 0; t < 8; t++)
+		{
+			w[r][t].id = (unsigned)(r * 8 + t);
+			w[r][t].bad = 0;
+		}
+		SL_THREADS(8, leaveBlocksWorker, w[r]);
+	}
+	for (int r = 0; r < 3; r++)
+		for (int t = 0; t < 8; t++)
+		{
+			EXPECT_EQ(w[r][t].bad, 0);
+			for (int i = 0; i < O_PER && bad < 0 && !w[r][t].bad; i++)
+				if (!sl_check(w[r][t].p[i], w[r][t].n[i], w[r][t].id * O_PER + (unsigned)i))
+					bad = (r * 8 + t) * O_PER + i;
+		}
+	for (int r = 0; r < 3; r++)
+		for (int t = 0; t < 8; t++)
+			for (int i = 0; i < O_PER && !w[r][t].bad; i++)
+				free(w[r][t].p[i]);
+	EXPECT_EQ(bad, -1);
+}
+
+/*
+ * Much space freed (256 MiB in blocks of 64 KiB to 4 MiB), a pause
+ * longer than the purge delays of common allocators (4.5 s: they give
+ * freed space back to the system after a delay, on a later call), then
+ * calls that let them do it, then as much allocated again: every block
+ * is usable.
+ */
+/* The size of block @p i of freed_space_is_available_after_a_pause. */
+static size_t	pauseSize(int i)
+{
+	return (i < 64 ? (size_t)64 << 10 : (size_t)(i % 4 + 1) << 20);
+}
+
+TEST_OPT(freed_space_is_available_after_a_pause, .timeout = 30, .ref = "C11 7.22.3.3p2")
+{
+	static void	*p[96];
+	size_t		bad = 0;
+
+	for (int i = 0; i < 96; i++)
+	{
+		p[i] = malloc(pauseSize(i));
+		ASSERT_NOTNULL(p[i]);
+		sl_fill(p[i], pauseSize(i), (unsigned)i);
+	}
+	for (int i = 0; i < 96; i++)
+		free(p[i]);
+	lc_sleep(LC_NS_PER_SEC * 9 / 2);
+	for (int i = 0; i < 25000; i++)
+		free(malloc((size_t)(i % 200) * 16 + 1100));
+	for (int i = 0; i < 96; i++)
+	{
+		p[i] = malloc(pauseSize(i));
+		ASSERT_NOTNULL(p[i]);
+		sl_fill(p[i], pauseSize(i), (unsigned)i + 100);
+	}
+	for (int i = 0; i < 96 && !bad; i++)
+		if (!sl_check(p[i], pauseSize(i), (unsigned)i + 100))
+			bad = pauseSize(i);
+	for (int i = 0; i < 96; i++)
+		free(p[i]);
+	EXPECT_UEQ(bad, 0);
 }
 
 TEST_OPT(macro_and_function_agree, .ref = "C11 7.1.4p1")

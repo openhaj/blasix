@@ -10,7 +10,7 @@
  * @file malloc.c
  * @brief Tests for malloc() (<stdlib.h>).
  * @Created: 2026/11/25 13:05:17 by Moutig
- * @Updated: 2026/11/25 13:07:57 by Moutig
+ * @Updated: 2026/11/25 14:04:06 by Moutig
  *
  * malloc() allocates space for an object of the given size, of
  * unspecified value (7.24.3.6p2). The pointer is suitably aligned for any
@@ -24,10 +24,13 @@
  * POSIX: a failure sets errno, ENOMEM when the storage is insufficient
  * (CX).
  *
+ * Stress (POSIX): 8 threads allocating at once (C11 7.22.3p2, XSH 2.9.1:
+ * thread-safe), and allocations in the child of fork() (XSH fork()).
+ *
  * Clauses: C99 7.20.3, 7.20.3.3; C11, C17 7.22.3, 7.22.3.4; C23 7.24.3,
  * 7.24.3.6. POSIX: XSH malloc().
  */
-#include "stdlib/stdlib_cases.h"
+#include "stdlib/stdlib_procs.h"
 
 TEST_OPT(prototype, .ref = "C11 7.22.3.4p1")
 {
@@ -276,6 +279,140 @@ TEST_OPT(allocations_after_frees, .ref = "C11 7.22.3p1")
 		for (int i = 1 - round % 2; i < 32; i += 2)
 			free(p[i]);
 	}
+	EXPECT_EQ(bad, -1);
+}
+
+/* ----- Stress: threads and fork() (stdlib_procs.h) ----- */
+
+/** One thread of concurrent_allocations_from_threads. */
+typedef struct s_mWorker
+{
+	unsigned	id;
+	int			bad;
+}	t_mWorker;
+
+/*
+ * 20000 rounds over 64 slots: check the block of the slot (its pattern),
+ * free it, allocate another size there (small, every 50th up to 64 KiB).
+ */
+static void	*allocWorker(void *arg)
+{
+	t_mWorker	*w = arg;
+	void		*p[64];
+	size_t		n[64];
+
+	lc_fill(p, 0, sizeof(p));
+	lc_fill(n, 0, sizeof(n));
+	for (int r = 0; r < 20000 && !w->bad; r++)
+	{
+		int	k = (r * 7 + (int)w->id) % 64;
+		int	i = r % 50 == 0 ? 1100 + (r / 50) % 18 : (r * 31 + (int)w->id * 17) % 1100;
+
+		if (p[k] && !sl_check(p[k], n[k], w->id * 64 + (unsigned)k))
+			w->bad = r + 1;
+		free(p[k]);
+		n[k] = sl_sizes(i);
+		p[k] = malloc(n[k]);
+		if (p[k] == NULL)
+			w->bad = r + 1;
+		else
+			sl_fill(p[k], n[k], w->id * 64 + (unsigned)k);
+	}
+	for (int k = 0; k < 64; k++)
+	{
+		if (p[k] && !w->bad && !sl_check(p[k], n[k], w->id * 64 + (unsigned)k))
+			w->bad = -1;
+		free(p[k]);
+	}
+	return (NULL);
+}
+
+/*
+ * 8 threads allocate and free at once: every block keeps the pattern its
+ * thread wrote (no block given twice, none overlapping another thread's).
+ */
+TEST_OPT(concurrent_allocations_from_threads, .since = "POSIX.1-2008",
+	.ref = "C11 7.22.3p2; XSH 2.9.1")
+{
+	t_mWorker	w[8];
+
+	for (int i = 0; i < 8; i++)
+	{
+		w[i].id = (unsigned)i;
+		w[i].bad = 0;
+	}
+	SL_THREADS(8, allocWorker, w);
+	for (int i = 0; i < 8; i++)
+		EXPECT_EQ(w[i].bad, 0);
+}
+
+/* Blocks of the parent, alive across fork(). */
+static void		*g_parent[48];
+static size_t	g_parentSize[48];
+
+/*
+ * In the child: the parent's blocks hold what the parent wrote; blocks of
+ * every class up to 1 MiB can be allocated; half of the parent's blocks
+ * are freed and the space allocated again.
+ *
+ * @return 0, or the step that failed.
+ */
+static int	childAllocates(void *arg)
+{
+	(void)arg;
+	for (int i = 0; i < 48; i++)
+		if (!sl_check(g_parent[i], g_parentSize[i], (unsigned)i))
+			return (1);
+	for (int i = 0; sl_sizes(i) && sl_sizes(i) <= ((size_t)1 << 20) + 1; i += 3)
+	{
+		void	*p = malloc(sl_sizes(i));
+
+		if (p == NULL)
+			return (2);
+		sl_fill(p, sl_sizes(i), 99);
+		if (!sl_check(p, sl_sizes(i), 99))
+			return (3);
+		free(p);
+	}
+	for (int i = 0; i < 48; i += 2)
+	{
+		free(g_parent[i]);
+		g_parent[i] = malloc(g_parentSize[i]);
+		if (g_parent[i] == NULL)
+			return (4);
+		sl_fill(g_parent[i], g_parentSize[i], 77);
+	}
+	for (int i = 1; i < 48; i += 2)
+		if (!sl_check(g_parent[i], g_parentSize[i], (unsigned)i))
+			return (5);
+	return (0);
+}
+
+/*
+ * The child of fork() of a single-threaded process can allocate and free,
+ * including the blocks it got from the parent; the parent's blocks do not
+ * change.
+ */
+TEST_OPT(allocation_in_the_child_of_fork, .since = "POSIX.1-2001", .ref = "XSH fork()")
+{
+	int	bad = -1;
+
+	for (int i = 0; i < 48; i++)
+	{
+		g_parentSize[i] = sl_sizes(i * 23 % 1127);
+		g_parent[i] = malloc(g_parentSize[i]);
+		ASSERT_NOTNULL(g_parent[i]);
+		sl_fill(g_parent[i], g_parentSize[i], (unsigned)i);
+	}
+	{
+		SL_FORK(st, childAllocates, NULL);
+		EXPECT_EQ(st, 0);
+	}
+	for (int i = 0; i < 48 && bad < 0; i++)
+		if (!sl_check(g_parent[i], g_parentSize[i], (unsigned)i))
+			bad = i;
+	for (int i = 0; i < 48; i++)
+		free(g_parent[i]);
 	EXPECT_EQ(bad, -1);
 }
 

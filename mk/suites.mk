@@ -126,6 +126,7 @@ stdlib_UNITS := \
 
 stdlib_HDRS := \
 	stdlib_cases.h \
+	stdlib_procs.h \
 
 # ----- string -----
 

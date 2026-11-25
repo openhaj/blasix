@@ -10,7 +10,7 @@
  * @file realloc.c
  * @brief Tests for realloc() (<stdlib.h>).
  * @Created: 2026/11/25 13:26:02 by Moutig
- * @Updated: 2026/11/25 13:33:51 by Moutig
+ * @Updated: 2026/11/25 14:04:15 by Moutig
  *
  * realloc() deallocates the old object and returns a pointer to a new
  * object of the given size, with the same contents up to the lesser of
@@ -30,10 +30,12 @@
  * old object freed. POSIX (CX): a failure for lack of memory sets errno
  * to ENOMEM.
  *
+ * Stress: blocks of ended POSIX threads resized by other threads.
+ *
  * Clauses: C99 7.20.3.4; C11, C17 7.22.3.5; C23 7.24.3.7. POSIX: XSH
  * realloc().
  */
-#include "stdlib/stdlib_cases.h"
+#include "stdlib/stdlib_procs.h"
 
 TEST_OPT(prototype, .ref = "C11 7.22.3.5p1")
 {
@@ -368,6 +370,102 @@ TEST_OPT(zero_size_is_null_with_einval_or_a_new_object, .since = "POSIX.1-2024",
 		EXPECT_EQ(errno, EINVAL);
 	}
 	free(q);
+}
+
+/* ----- Stress: threads (stdlib_procs.h) ----- */
+
+# define R_PER	300
+
+/** One thread: blocks it allocates, or resizes. */
+typedef struct s_rWorker
+{
+	unsigned char	*p[R_PER];
+	size_t			n[R_PER];
+	size_t			filled[R_PER];
+	unsigned		id;
+	int				bad;
+}	t_rWorker;
+
+/* Allocate R_PER blocks with the thread's pattern, exit keeping them. */
+static void	*makeWorker(void *arg)
+{
+	t_rWorker	*w = arg;
+
+	for (int i = 0; i < R_PER; i++)
+	{
+		w->n[i] = sl_sizes((i * 29 + (int)w->id) % 1115);
+		w->filled[i] = w->n[i];
+		w->p[i] = malloc(w->n[i]);
+		if (w->p[i] == NULL)
+			w->bad = i + 1;
+		else
+			sl_fill(w->p[i], w->n[i], w->id * R_PER + (unsigned)i);
+	}
+	return (NULL);
+}
+
+/* Resize blocks another thread made (grow, then shrink); the prefix kept. */
+static void	*resizeWorker(void *arg)
+{
+	t_rWorker	*w = arg;
+
+	for (int i = 0; i < R_PER && !w->bad; i++)
+	{
+		size_t			big = w->n[i] * 3 + 100;
+		size_t			small = w->n[i] / 2 + 1;
+		unsigned char	*q = realloc(w->p[i], big);
+
+		if (q == NULL || !sl_check(q, w->n[i], w->id * R_PER + (unsigned)i))
+		{
+			w->bad = i + 1;
+			break ;
+		}
+		w->p[i] = q;
+		q = realloc(q, small);
+		if (q == NULL || !sl_checkPrefix(q, small, w->n[i], w->id * R_PER + (unsigned)i))
+		{
+			w->bad = i + 1;
+			break ;
+		}
+		w->p[i] = q;
+		w->n[i] = small;
+	}
+	return (NULL);
+}
+
+/*
+ * Blocks allocated by threads that ended are resized by other threads,
+ * then by the main thread: the contents are kept every time.
+ */
+TEST_OPT(resize_blocks_of_other_threads, .since = "POSIX.1-2008", .ref = "C11 7.22.3.5p2")
+{
+	static t_rWorker	w[4];
+	int					bad = -1;
+
+	for (int t = 0; t < 4; t++)
+	{
+		w[t].id = (unsigned)t;
+		w[t].bad = 0;
+	}
+	SL_THREADS(4, makeWorker, w);
+	SL_THREADS(4, resizeWorker, w);
+	for (int t = 0; t < 4; t++)
+	{
+		EXPECT_EQ(w[t].bad, 0);
+		for (int i = 0; i < R_PER && bad < 0 && !w[t].bad; i++)
+		{
+			unsigned char	*q = realloc(w[t].p[i], w[t].n[i] + 5000);
+
+			ASSERT_NOTNULL(q);
+			w[t].p[i] = q;
+			if (!sl_checkPrefix(q, w[t].n[i], w[t].filled[i], w[t].id * R_PER + (unsigned)i))
+				bad = t * R_PER + i;
+		}
+	}
+	for (int t = 0; t < 4; t++)
+		for (int i = 0; i < R_PER; i++)
+			free(w[t].p[i]);
+	EXPECT_EQ(bad, -1);
 }
 
 TEST_OPT(macro_and_function_agree, .ref = "C11 7.1.4p1")

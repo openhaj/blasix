@@ -10,7 +10,7 @@
  * @file calloc.c
  * @brief Tests for calloc() (<stdlib.h>).
  * @Created: 2026/11/25 13:20:46 by Moutig
- * @Updated: 2026/11/25 13:20:53 by Moutig
+ * @Updated: 2026/11/25 14:03:52 by Moutig
  *
  * calloc() allocates space for an array of nmemb objects of size bytes,
  * initialized to all bits zero (7.24.3.2p2), with the guarantees of every
@@ -21,10 +21,13 @@
  * allocated either. POSIX (CX): a failure sets errno, ENOMEM; POSIX.1-2024
  * names the overflow of nelem * elsize.
  *
+ * Stress: zero after a pause (freed space an allocator may have given back
+ * to the system), and on blocks freed across POSIX threads.
+ *
  * Clauses: C99 7.20.3.1; C11, C17 7.22.3.2; C23 7.24.3.2. POSIX: XSH
  * calloc().
  */
-#include "stdlib/stdlib_cases.h"
+#include "stdlib/stdlib_procs.h"
 
 TEST_OPT(prototype, .ref = "C11 7.22.3.2p1")
 {
@@ -284,6 +287,110 @@ TEST_OPT(overflow_sets_enomem, .since = "POSIX.1-2024", .ref = "XSH calloc() ERR
 	errno = 0;
 	EXPECT_NULL(calloc(SIZE_MAX / 3 + 1, 3));
 	EXPECT_EQ(errno, ENOMEM);
+}
+
+/* ----- Stress: a pause, threads (stdlib_procs.h) ----- */
+
+/*
+ * Dirty space freed, a pause longer than the purge delays of common
+ * allocators (4.5 s) and calls that let them give it back to the system
+ * (or not), then calloc() of the same sizes: all zero, whether the space
+ * came back from the system or not.
+ */
+TEST_OPT(zeroed_after_a_pause, .timeout = 30, .ref = "C11 7.22.3.2p2")
+{
+	static unsigned char	*p[80];
+	size_t					bad = 0;
+
+	for (int i = 0; i < 80; i++)
+	{
+		size_t	n = i < 48 ? (size_t)(i + 1) << 12 : (size_t)(i % 4 + 1) << 20;
+
+		p[i] = malloc(n);
+		ASSERT_NOTNULL(p[i]);
+		lc_fill(p[i], 0xa5, n);
+	}
+	for (int i = 0; i < 80; i++)
+		free(p[i]);
+	lc_sleep(LC_NS_PER_SEC * 9 / 2);
+	for (int i = 0; i < 25000; i++)
+		free(malloc((size_t)(i % 200) * 16 + 1100));
+	for (int i = 0; i < 80 && !bad; i++)
+	{
+		size_t	n = i < 48 ? (size_t)(i + 1) << 12 : (size_t)(i % 4 + 1) << 20;
+
+		p[i] = calloc(1, n);
+		if (p[i] == NULL || firstNonZero(p[i], n) != n)
+			bad = n;
+	}
+	for (int i = 0; i < 80; i++)
+		free(p[i]);
+	EXPECT_UEQ(bad, 0);
+}
+
+# define C_PER	1500
+
+/** One thread: the blocks it allocates (dirty) or callocs. */
+typedef struct s_cWorker
+{
+	unsigned char	*p[C_PER];
+	int				bad;
+}	t_cWorker;
+
+/* Allocate C_PER blocks of 16 to 2 KiB, dirty them, exit keeping them. */
+static void	*dirtyWorker(void *arg)
+{
+	t_cWorker	*w = arg;
+
+	for (int i = 0; i < C_PER; i++)
+	{
+		w->p[i] = malloc((size_t)(i % 128 + 1) * 16);
+		if (w->p[i] == NULL)
+			w->bad = 1;
+		else
+			lc_fill(w->p[i], 0xff, (size_t)(i % 128 + 1) * 16);
+	}
+	return (NULL);
+}
+
+/* calloc() C_PER blocks of the same sizes: each must be all zero. */
+static void	*callocWorker(void *arg)
+{
+	t_cWorker	*w = arg;
+
+	for (int i = 0; i < C_PER; i++)
+	{
+		size_t	n = (size_t)(i % 128 + 1) * 16;
+
+		w->p[i] = calloc(1, n);
+		if (w->p[i] == NULL || firstNonZero(w->p[i], n) != n)
+			w->bad = i + 1;
+	}
+	return (NULL);
+}
+
+/*
+ * Threads dirty blocks and exit, the main thread frees them (blocks of
+ * ended threads), other threads calloc() the same sizes: all zero.
+ */
+TEST_OPT(zeroed_when_reused_across_threads, .since = "POSIX.1-2008", .ref = "C11 7.22.3.2p2")
+{
+	static t_cWorker	w[2][4];
+
+	SL_THREADS(4, dirtyWorker, w[0]);
+	for (int t = 0; t < 4; t++)
+	{
+		EXPECT_EQ(w[0][t].bad, 0);
+		for (int i = 0; i < C_PER; i++)
+			free(w[0][t].p[i]);
+	}
+	SL_THREADS(4, callocWorker, w[1]);
+	for (int t = 0; t < 4; t++)
+	{
+		EXPECT_EQ(w[1][t].bad, 0);
+		for (int i = 0; i < C_PER; i++)
+			free(w[1][t].p[i]);
+	}
 }
 
 TEST_OPT(macro_and_function_agree, .ref = "C11 7.1.4p1")
