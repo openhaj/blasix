@@ -10,7 +10,7 @@
  * @file string_cases.h
  * @brief Shared helpers and cases of the <string.h> units.
  * @Created: 2026/11/24 05:21:31 by Moutig
- * @Updated: 2026/11/24 10:32:27 by Moutig
+ * @Updated: 2026/11/25 10:41:57 by Moutig
  *
  * What every unit of src/suites/string/ needs around the function it
  * tests:
@@ -26,7 +26,10 @@
  *   - ST_EXT1_IGNORE: runtime-constraint violations of Annex K must
  *     return instead of calling the default handler (which may abort),
  *     through set_constraint_handler_s() of <stdlib.h>;
- *   - st_sign, st_ascii: comparison sign, ASCII execution character set.
+ *   - st_sign, st_ascii: comparison sign, ASCII execution character set;
+ *   - st_refStrncmp, st_refStrstr, st_rand: reference results (byte by
+ *     byte, no libc) and reproducible pseudo-random cases, for the
+ *     comparisons over every length and alignment.
  *
  * Only <string.h> is under test. <errno.h>, <limits.h> (and <locale.h>,
  * <stdlib.h> where said) only prepare the data.
@@ -65,6 +68,57 @@
 		__VA_ARGS__															\
 		EXPECT_EQ(errno, ST_ERRNO_MARK);									\
 	}
+
+/* ----- Reference results, without the libc under test ----- */
+
+/*
+ * These are simple naive and very slow implementations but,
+ * they lower the risk of bugs and therefore are used as reference.
+*/
+
+/*
+ * What strncmp() must return, as a sign (-1, 0, 1): bytes as unsigned
+ * char, at most n of them, not past a null character. strcmp() is
+ * n = (size_t)-1. The units compare the libc against these on every
+ * length, alignment and position (word-at-a-time implementations).
+ */
+static inline int	st_refStrncmp(const char *a, const char *b, size_t n)
+{
+	for (; n; n--, a++, b++)
+	{
+		unsigned char	x = (unsigned char)*a;
+		unsigned char	y = (unsigned char)*b;
+
+		if (x != y)
+			return (x < y ? -1 : 1);
+		if (x == '\0')
+			return (0);
+	}
+	return (0);
+}
+
+/* What strstr() must return: the first match, by brute force. */
+static inline const char	*st_refStrstr(const char *h, const char *n)
+{
+	for (; ; h++)
+	{
+		size_t	i = 0;
+
+		while (n[i] && h[i] == n[i])
+			i++;
+		if (n[i] == '\0')
+			return (h);
+		if (*h == '\0')
+			return (NULL);
+	}
+}
+
+/* Deterministic pseudo-random numbers (an LCG): the same cases each run. */
+static inline unsigned	st_rand(unsigned *seed)
+{
+	*seed = *seed * 1103515245u + 12345u;
+	return ((*seed >> 16) & 0x7fff);
+}
 
 /* ----- Locale objects (POSIX.1-2008 *_l functions) ----- */
 
