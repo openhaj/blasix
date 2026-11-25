@@ -10,7 +10,7 @@
  * @file cli.c
  * @brief Command line of lcrun: usage and options.
  * @Created: 2026/11/24 08:25:17 by Moutig
- * @Updated: 2026/11/25 09:21:04 by Moutig
+ * @Updated: 2026/11/25 09:28:37 by Moutig
  *
  * Every option fills t_opts; the command (run, --spec-make, ...) is a
  * t_mode. --compare, --standards and --options are handled by main.c
@@ -37,6 +37,7 @@ static void	usage(void)
 {
 	fputs(
 "usage: lcrun [options] BINDIR          run the tests\n"
+"       lcrun [options] --cache-status BINDIR  what the next run reruns, why\n"
 "       lcrun [options] --spec-list      interfaces required by the target\n"
 "       lcrun [options] --spec-check     lint spec/ and src/suites/\n"
 "       lcrun [options] --spec-make      make variables for the target\n"
@@ -107,6 +108,8 @@ int	parseOpts(t_opts *o, int argc, char **argv, t_mode *mode,
 			o->lax = 1;
 		else if (!strcmp(a, "--no-color"))
 			o->color = 0;
+		else if (!strcmp(a, "--cache-status"))
+			*mode = MODE_CACHE;
 		else if (!strcmp(a, "--spec-make"))
 			*mode = MODE_MAKE;
 		else if (!strcmp(a, "--spec-list"))
@@ -162,7 +165,7 @@ int	parseOpts(t_opts *o, int argc, char **argv, t_mode *mode,
 		else
 			return (usage(), -1);
 	}
-	if (*mode == MODE_RUN && o->binDir == NULL)
+	if ((*mode == MODE_RUN || *mode == MODE_CACHE) && o->binDir == NULL)
 		return (usage(), -1);
 	if (o->jobs < 1)
 		o->jobs = 1;

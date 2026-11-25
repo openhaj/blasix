@@ -10,7 +10,7 @@
  * @file run.h
  * @brief A run: units, tests, results, and how they are found and run (run/).
  * @Created: 2026/11/24 08:28:05 by Moutig
- * @Updated: 2026/11/25 09:13:28 by Moutig
+ * @Updated: 2026/11/25 09:28:18 by Moutig
  *
  * run/discover.c  sources of the suites, units of the target, their
  *                 tests, probe results;
@@ -247,11 +247,22 @@ void		cacheLoad(t_run *r);
  * @brief Store the results of this run in the cache (-C), keeping the
  *        entries of the units that were not selected.
  *
- * Timeouts and errors are not stored. Nothing without -C or with -r N > 1.
+ * Timeouts and errors are stored but never reused (cacheStatus() says
+ * so). Nothing without -C or with -r N > 1.
  *
  * @param r Run, after runAll().
  */
 void		cacheSave(t_run *r);
+
+/**
+ * @brief --cache-status: for every selected test, whether the next run
+ *        takes its result from the cache, and why not (new test, binary
+ *        or timeout changed, last run timed out, ...). Runs nothing.
+ *
+ * @param r Run, after discover().
+ * @return 0.
+ */
+int			cacheStatus(t_run *r);
 
 /**
  * @brief Add the results that come from the spec and the probes, once

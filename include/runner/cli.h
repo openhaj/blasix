@@ -10,7 +10,7 @@
  * @file cli.h
  * @brief Command line of lcrun (cli.c).
  * @Created: 2026/11/24 08:27:32 by Moutig
- * @Updated: 2026/11/24 08:29:00 by Moutig
+ * @Updated: 2026/11/25 09:28:14 by Moutig
  *
  *
  * The command of an invocation (t_mode) and the options (t_opts, run.h).
@@ -33,7 +33,8 @@ typedef enum e_mode
 	MODE_LIST,		/* --spec-list */
 	MODE_CHECK,		/* --spec-check */
 	MODE_MATRIX,	/* --spec-matrix */
-	MODE_TODO		/* --spec-todo */
+	MODE_TODO,		/* --spec-todo */
+	MODE_CACHE		/* lcrun --cache-status BINDIR */
 }	t_mode;
 
 /* ----- Shared between the files of the module ----- */

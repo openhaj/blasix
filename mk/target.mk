@@ -48,7 +48,8 @@ LAX_CFLAGS	:= $(if $(filter 1,$(LAX)),$(LIBC_LAX_CFLAGS))
 
 SPEC_MK		:= $(OUT)/spec.mk
 NO_SPEC_GOALS := clean fclean help standards options new init format \
-	headers-add headers-check sources-check spec-list spec-check matrix todo run-all
+	headers-add headers-check sources-check spec-list spec-check matrix todo run-all \
+	cache-clean
 
 ifeq ($(filter $(NO_SPEC_GOALS),$(MAKECMDGOALS)),)
 include $(SPEC_MK)

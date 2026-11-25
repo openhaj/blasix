@@ -10,7 +10,7 @@
  * @file main.c
  * @brief lcrun: entry point, one command per invocation.
  * @Created: 2026/11/24 08:25:41 by Moutig
- * @Updated: 2026/11/25 09:21:07 by Moutig
+ * @Updated: 2026/11/25 09:28:44 by Moutig
  *
  * Parses the command line (cli.c), loads the spec database (spec/), then
  * runs the command: a spec tool (tools/), or a run: discover the units
@@ -80,6 +80,8 @@ int	main(int argc, char **argv)
 		return (toolMake(&r));
 	}
 	discover(&r);
+	if (mode == MODE_CACHE)
+		return (cacheStatus(&r));
 	if (r.o.listOnly)
 	{
 		for (size_t i = 0; i < r.nTests; i++)

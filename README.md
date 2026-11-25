@@ -17,6 +17,8 @@ make run CAT=string FUNC=strlen,strcmp       # only some functions
 make run-all                                 # the 8 standards, one line each
 make compare A=host B=hajlibc                # same target, two libcs
 make coverage LIBC=hajlibc                   # coverage of the libc (lcov tracefile)
+make cache-status                            # what the next run reruns, and why
+make cache-clean                             # forget the cached results (build kept)
 make spec-list STD=c11                       # what C11 requires
 make matrix                                  # tested / required, 8 standards
 make help                                    # all targets and options

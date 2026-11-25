@@ -33,6 +33,9 @@
 #   make run CACHE=0                 run every test, even those whose binary
 #                                    did not change (default: their last
 #                                    result is reused, build/<libc>/<target>/cache.tsv)
+#   make cache-status                what the next run takes from the cache,
+#                                    and why the others run (V=1: every test)
+#   make cache-clean                 forget the cached results of $(LIBC)
 #   make run-all                     the 8 standards, one line each
 #   make compare A=host B=hajlibc    same target, two libcs, what differs
 #   make coverage LIBC=hajlibc       line coverage of the libc sources
@@ -47,7 +50,8 @@
 #                                    create src/suites/string/search/strchr.c, list it
 #                                    in mk/suites.mk
 #                                    (SINCE=V adds the spec entry, HEADER=x/y.h)
-#   make clean / fclean              remove build/$(LIBC) / build/
+#   make clean / fclean              remove build/$(LIBC) / build/ (and the
+#                                    result cache with them)
 #
 # Tooling:
 #   make init                        enable the git hooks

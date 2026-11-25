@@ -10,7 +10,7 @@
  * @file cache.c
  * @brief Result cache: a test whose binary did not change is not run again.
  * @Created: 2026/11/25 09:13:28 by Moutig
- * @Updated: 2026/11/25 09:20:29 by Moutig
+ * @Updated: 2026/11/25 09:28:28 by Moutig
  *
  * The cache file (-C FILE, one per libc and target) holds the last result
  * of every test, with what it depends on:
@@ -27,9 +27,13 @@
  * (it decides the statuses); if either changed, the whole cache is
  * dropped. Messages and output are escaped (\t \n \\).
  *
- * Only reproducible results are kept: pass, fail, skip, unimplemented,
- * crash. A timeout or an error depends on the load of the machine and is
+ * Only reproducible results are reused: pass, fail, skip, unimplemented,
+ * crash. A timeout or an error depends on the load of the machine: it is
+ * stored (so that --cache-status can say why the test runs again) but
  * always run again. With -r N (flakiness) the cache is not used.
+ *
+ * --cache-status (cacheStatus()) says, without running anything, which
+ * tests the next run takes from the cache and why the others run.
  */
 
 #include "runner/lcrun.h"
@@ -216,29 +220,50 @@ static int	statusFromName(const char *s)
 static t_centry	*gEntries;
 static size_t	gN;
 
+/** What readFile() found. */
+typedef enum e_cfile
+{
+	CF_OK,			/* Entries loaded. */
+	CF_MISSING,		/* No cache file yet. */
+	CF_FORMAT,		/* Another format version, or not a cache file. */
+	CF_LCRUN,		/* Written by another lcrun. */
+	CF_LIBC,		/* Written with another run-time libc (-K). */
+}	t_cfile;
+
 /**
- * @brief Read the cache file; empty if missing or written for another
- *        lcrun or run-time libc.
+ * @brief Read the cache file; nothing is loaded unless it was written by
+ *        this lcrun for this run-time libc.
  *
  * @param r Run.
+ * @return What was found.
  */
-static void	readFile(const t_run *r)
+static t_cfile	readFile(const t_run *r)
 {
 	char	want[128];
 	char	*line = NULL;
 	size_t	cap = 0;
 	ssize_t	len;
 	FILE	*fp = fopen(r->o.cacheFile, "r");
+	t_cfile	st = CF_OK;
 
 	if (fp == NULL)
-		return ;
+		return (CF_MISSING);
 	header(r, want, sizeof(want));
 	len = getline(&line, &cap, fp);
-	if (len <= 0 || (line[len - 1] = '\0', strcmp(line, want) != 0))
+	if (len > 0 && line[len - 1] == '\n')
+		line[--len] = '\0';
+	/* "#lcrun-cache V " (15 bytes), lcrun hash (16), ' ', libc hash (16) */
+	if (len != (ssize_t)strlen(want) || strncmp(line, want, 15) != 0)
+		st = CF_FORMAT;
+	else if (strncmp(line + 15, want + 15, 16) != 0)
+		st = CF_LCRUN;
+	else if (strcmp(line + 32, want + 32) != 0)
+		st = CF_LIBC;
+	if (st != CF_OK)
 	{
 		free(line);
 		fclose(fp);
-		return ;
+		return (st);
 	}
 	while ((len = getline(&line, &cap, fp)) > 0)
 	{
@@ -268,6 +293,7 @@ static void	readFile(const t_run *r)
 	}
 	free(line);
 	fclose(fp);
+	return (CF_OK);
 }
 
 /**
@@ -309,27 +335,51 @@ static t_centry	*findEntry(const t_test *t)
 	return (NULL);
 }
 
-void	cacheLoad(t_run *r)
+/**
+ * @brief Why test @p t must run, or NULL when its stored result is reused.
+ *
+ * @param r Run, entries loaded.
+ * @param t Test.
+ * @param e Set to its entry (when the result is reused).
+ * @return Static reason, or NULL.
+ */
+static const char	*whyRerun(const t_run *r, t_test *t, t_centry **e)
 {
 	char	hash[17];
+	int		st;
 
+	*e = findEntry(t);
+	if (*e == NULL)
+		return ("new test (no stored result)");
+	if (unitHash(t->unit, hash) == NULL)
+		return ("binary unreadable");
+	if (strcmp((*e)->f[3], hash) != 0)
+		return ("binary changed");
+	if (atoi((*e)->f[4]) != (t->timeout ? t->timeout : r->o.timeout))
+		return ("timeout changed");
+	st = statusFromName((*e)->f[5]);
+	if (st == ST_TIMEOUT)
+		return ("last run timed out");
+	if (st == ST_ERROR)
+		return ("last run ended in error");
+	if (st < 0 || !cacheable((t_status)st))
+		return ("stored status not reusable");
+	return (NULL);
+}
+
+void	cacheLoad(t_run *r)
+{
 	if (r->o.cacheFile == NULL || r->o.repeat > 1)
 		return ;
 	readFile(r);
 	for (size_t i = 0; i < r->nTests; i++)
 	{
 		t_test		*t = &r->tests[i];
-		t_centry	*e = findEntry(t);
-		int			st;
+		t_centry	*e;
 
-		if (e == NULL || unitHash(t->unit, hash) == NULL
-			|| strcmp(e->f[3], hash) != 0
-			|| atoi(e->f[4]) != (t->timeout ? t->timeout : r->o.timeout))
+		if (whyRerun(r, t, &e) != NULL)
 			continue ;
-		st = statusFromName(e->f[5]);
-		if (st < 0 || !cacheable((t_status)st))
-			continue ;
-		t->st = (t_status)st;
+		t->st = (t_status)statusFromName(e->f[5]);
 		t->ms = atof(e->f[6]);
 		t->cpuMs = atof(e->f[7]);
 		t->rssKb = atol(e->f[8]);
@@ -420,7 +470,7 @@ void	cacheSave(t_run *r)
 	{
 		t_test	*t = &r->tests[i];
 
-		if (t->unit == NULL || t->unit->bin == NULL || !cacheable(t->st)
+		if (t->unit == NULL || t->unit->bin == NULL || t->st == ST_UNAVAIL
 			|| unitHash(t->unit, hash) == NULL)
 			continue ;
 		putTest(fp, r, t, hash);
@@ -432,4 +482,79 @@ void	cacheSave(t_run *r)
 	free(gEntries);
 	gEntries = NULL;
 	gN = 0;
+}
+
+/**
+ * @brief Why nothing can be reused, for a cache file that was not loaded.
+ *
+ * @param st What readFile() found.
+ * @return Static text.
+ */
+static const char	*fileReason(t_cfile st)
+{
+	if (st == CF_MISSING)
+		return ("no cache yet");
+	if (st == CF_LCRUN)
+		return ("lcrun changed since the cache was written");
+	if (st == CF_LIBC)
+		return ("the run-time libc changed (LIBC_RUNTIME)");
+	return ("not a cache file of this lcrun version");
+}
+
+/** Reasons counted by cacheStatus() (whyRerun() strings, by address). */
+#define LC_MAX_REASONS	16
+
+int	cacheStatus(t_run *r)
+{
+	const char	*why[LC_MAX_REASONS];
+	size_t		count[LC_MAX_REASONS] = {0};
+	int			nWhy = 0;
+	size_t		reused = 0;
+	size_t		shown = 0;
+	t_cfile		st;
+
+	if (r->o.cacheFile == NULL)
+		return (printf("cache: off (CACHE=0 or coverage): all %zu tests run\n",
+			r->nTests), 0);
+	if (r->o.repeat > 1)
+		return (printf("cache: not used with -r %d (REPEAT): all %zu tests run\n",
+			r->o.repeat, r->nTests), 0);
+	st = readFile(r);
+	printf("cache: %s\n", r->o.cacheFile);
+	if (st != CF_OK)
+		return (printf("all %zu tests run: %s\n", r->nTests, fileReason(st)), 0);
+	for (size_t i = 0; i < r->nTests; i++)
+	{
+		t_test		*t = &r->tests[i];
+		t_centry	*e;
+		const char	*w = whyRerun(r, t, &e);
+		int			k;
+
+		if (w == NULL)
+		{
+			reused++;
+			continue ;
+		}
+		for (k = 0; k < nWhy && why[k] != w; k++)
+			;
+		if (k == nWhy && nWhy < LC_MAX_REASONS)
+			why[nWhy++] = w;
+		if (k < LC_MAX_REASONS)
+			count[k]++;
+		if (r->o.verbose || shown < 30)
+			printf("  run   %s/%s/%s  %s\n", t->cat, t->func, t->name, w);
+		shown++;
+	}
+	if (shown > 30 && !r->o.verbose)
+		printf("  ... %zu more (V=1 lists them all)\n", shown - 30);
+	printf("%zu tests: %zu from the cache, %zu to run", r->nTests, reused, shown);
+	for (int k = 0; k < nWhy; k++)
+		printf("%s%zu %s", k ? ", " : " (", count[k], why[k]);
+	printf("%s\n", nWhy ? ")" : "");
+	for (size_t i = 0; i < gN; i++)
+		free(gEntries[i].f[0]);
+	free(gEntries);
+	gEntries = NULL;
+	gN = 0;
+	return (0);
 }

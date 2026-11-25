@@ -236,8 +236,9 @@ does not run a test again while these did not change:
   (path, size, date, inode). A change drops the whole cache;
 - **lcrun itself** (it decides the statuses): a new lcrun drops it too.
 
-Only reproducible results are kept: `pass`, `fail`, `skip`,
-`unimplemented`, `crash`. A `timeout` or an `error` runs again. Running a
+Only reproducible results are reused: `pass`, `fail`, `skip`,
+`unimplemented`, `crash`. A `timeout` or an `error` is stored but runs
+again. Running a
 subset (`CAT=`, `FUNC=`, `TEST=`) keeps the entries of the other units.
 The report says how many results come from the cache, `-v` marks them,
 and `results.json` has `"cached"` per test.
@@ -247,6 +248,13 @@ an installed locale, the time) is reused as long as its binary does not
 change: `CACHE=0` runs everything. The cache is not used with
 `REPEAT=n` (flakiness), nor for `make coverage` (the tests must run to
 write their counters).
+
+`make cache-status` builds, then lists the tests the next run would
+run, each with why (`new test`, `binary changed`, `timeout changed`,
+`last run timed out`, ..., or for all of them `lcrun changed`, `the
+run-time libc changed`), and a summary; `V=1` lists them all.
+`make cache-clean` removes the cached results of `$(LIBC)` for every
+target and keeps the build; `make clean` removes both.
 
 ## What a run measures
 
