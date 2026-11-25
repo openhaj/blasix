@@ -10,7 +10,7 @@
  * @file cov.c
  * @brief Coverage dump without the libgcov runtime (COV=1 only).
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/24 00:38:00 by Moutig
+ * @Updated: 2026/11/25 12:00:00 by Moutig
  *
  * The system libgcov is built against glibc (__fprintf_chk,
  * __errno_location, ...) and cannot link with another libc. Instead:
@@ -26,7 +26,18 @@
  *   - each process writes under LC_COV_DIR/<pid>/<original path>,
  *     scripts/cov-report.sh merges them with gcov-tool.
  *
- * Tests that end in exit() or a signal do not dump.
+ * A process can end in three ways, and each one dumps:
+ *
+ *   - main() returns (or a test calls exit()): main() dumps after a
+ *     normal test, then covAtExit(), a destructor run by the libc's
+ *     exit(), dumps again with the counters of exit() itself (same
+ *     files, rewritten: the counters only grow);
+ *   - lc_exitNow() (raw exit_group): it dumps first (lc.c);
+ *   - the signal a test expects (.expect = LC_SIGNAL(s)): main() calls
+ *     lc_covArmSignal(s) before the test, whose handler dumps and then
+ *     dies from s with the default action.
+ *
+ * _exit(), _Exit() and an unexpected signal still end without a dump.
  *
  * __gcov_info_to_gcda calls back into this file: onFilename() once per
  * object (opens its .gcda), onDump() for each chunk of data, and
@@ -196,4 +207,38 @@ void	lc_covDump(void)
 		if (fd >= 0)
 			lc_sysClose((int)fd);
 	}
+}
+
+/**
+ * @brief Dump at exit(): the libc under test runs the destructors.
+ *
+ * If that libc does not run them, only the dump of main() is left.
+ */
+__attribute__((destructor))
+static void	covAtExit(void)
+{
+	lc_covDump();
+}
+
+/**
+ * @brief Handler of the expected signal: dump, then die from it.
+ *
+ * Installed with SA_RESETHAND | SA_NODEFER: the action is already back
+ * to SIG_DFL and the signal is not blocked, so tgkill() ends the process
+ * with that same signal (the status lcrun checks). A synchronous signal
+ * (SIGSEGV, SIGBUS, ...) dies here as well instead of faulting again.
+ *
+ * @param sig Signal number.
+ */
+static void	covOnSignal(int sig)
+{
+	lc_covDump();
+	lc_sysTgkill(lc_sysGetpid(), lc_sysGettid(), sig);
+	lc_sysExit(128 + sig);	/* not reached */
+}
+
+void	lc_covArmSignal(int sig)
+{
+	/* A test that installs its own handler for sig replaces this one. */
+	lc_sysSigaction(sig, covOnSignal, LC_SA_RESETHAND | LC_SA_NODEFER);
 }

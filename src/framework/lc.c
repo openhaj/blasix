@@ -10,7 +10,7 @@
  * @file lc.c
  * @brief Test-side engine: checks, output protocol, main().
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/24 10:28:08 by Moutig
+ * @Updated: 2026/11/25 08:41:04 by Moutig
  *
  * Linked into every test binary, compiled against the libc under
  * test but calling none of its functions (see sys.c).
@@ -60,15 +60,35 @@ extern const struct lc_test	__stop_lc_tests[] __attribute__((weak));
  */
 void	lc_covDump(void) __attribute__((weak));
 
+/**
+ * @brief Dump the coverage counters when signal @p sig kills the test
+ *        (cov.c).
+ *
+ * Coverage builds only, like lc_covDump(). Called for a test that
+ * expects LC_SIGNAL(sig), before its body runs.
+ *
+ * @param sig Signal number.
+ */
+void	lc_covArmSignal(int sig) __attribute__((weak));
+
 /* ----- State ----- */
 
 static int					gProto;		/* 1: events on fd 3 for lcrun */
 static int					gFd = 2;	/* where reports go */
 static int					gEscape;	/* escape \t \n \\ while writing a field */
-static int					gAsserts;	/* checks run by the current test */
-static int					gFailed;	/* checks failed by the current test */
-static int					gSkipped;	/* the current test called SKIP */
-static int					gUnimpl;	/* the current test called NOT_IMPLEMENTED */
+
+/** Result of the current test so far. */
+struct lc_counts
+{
+	int	asserts;	/* checks run */
+	int	failed;		/* checks failed */
+	int	skipped;	/* SKIP was called */
+	int	unimpl;		/* NOT_IMPLEMENTED was called */
+};
+
+static struct lc_counts		gLocal;
+/* &gLocal, or a shared page once the test forks with lc_child() */
+static struct lc_counts		*gCnt = &gLocal;
 
 /* ----- Output (own buffer, raw write) ----- */
 
@@ -294,6 +314,9 @@ int	lc_unlink(const char *path)
 
 void	lc_exitNow(int status)
 {
+	/* Raw exit_group skips the destructors: dump here. */
+	if (lc_covDump)
+		lc_covDump();
 	lc_sysExit(status);
 }
 
@@ -341,6 +364,184 @@ char	*lc_tmpPath(char *buf, lc_size_t size, const char *tag)
 	return (buf);
 }
 
+/** First descriptor the capture may use for its own files. */
+#define LC_CAPTURE_MINFD	10
+
+/**
+ * @brief Move descriptor @p fd to a number >= LC_CAPTURE_MINFD.
+ *
+ * @param fd Descriptor (closed here).
+ * @return The new descriptor (close-on-exec), or -errno.
+ */
+static long	lcHighFd(long fd)
+{
+	long	r;
+
+	r = lc_sysFcntl((int)fd, LC_F_DUPFD_CLOEXEC, LC_CAPTURE_MINFD);
+	lc_sysClose((int)fd);
+	return (r);
+}
+
+int	lc_captureStart(lc_capture *c, int fd)
+{
+	char	path[64];
+	long	r;
+
+	c->fd = fd;
+	c->saved = -1;
+	r = lc_sysFcntl(fd, LC_F_DUPFD_CLOEXEC, LC_CAPTURE_MINFD);
+	if (r >= 0)
+		c->saved = (int)r;
+	else if (r != -9)	/* -EBADF: fd was closed, nothing to save */
+		return ((int)r);
+	lc_tmpPath(path, sizeof(path), "capture");
+	r = lc_sysOpen(path, LC_O_RDWR | LC_O_CREAT | LC_O_TRUNC | LC_O_CLOEXEC,
+			0600);
+	if (r >= 0)
+	{
+		lc_sysUnlink(path);
+		r = lcHighFd(r);
+	}
+	if (r >= 0)
+	{
+		c->file = (int)r;
+		r = lc_sysDup2(c->file, fd);
+		if (r >= 0)
+			return (0);
+		lc_sysClose(c->file);
+	}
+	if (c->saved >= 0)
+		lc_sysClose(c->saved);
+	return ((int)r);
+}
+
+long	lc_captureEnd(lc_capture *c, char *buf, lc_size_t size)
+{
+	long		len;
+	long		r;
+	lc_size_t	got;
+
+	if (c->saved >= 0)
+	{
+		lc_sysDup2(c->saved, c->fd);
+		lc_sysClose(c->saved);
+	}
+	else
+		lc_sysClose(c->fd);
+	len = lc_sysLseek(c->file, 0, LC_SEEK_END);
+	got = 0;
+	if (len >= 0 && size > 0)
+	{
+		r = lc_sysLseek(c->file, 0, LC_SEEK_SET);
+		while (r >= 0 && got + 1 < size)
+		{
+			r = lc_sysRead(c->file, buf + got, size - 1 - got);
+			if (r <= 0)
+				break ;
+			got += (lc_size_t)r;
+		}
+	}
+	if (size > 0)
+		buf[got] = '\0';
+	lc_sysClose(c->file);
+	return (len);
+}
+
+/**
+ * @brief Move the check counters to memory shared with the children.
+ *
+ * Once per process; the counts so far are kept.
+ *
+ * @return 0, or -ENOMEM.
+ */
+static int	lcShareCounts(void)
+{
+	struct lc_counts	*shared;
+
+	if (gCnt != &gLocal)
+		return (0);
+	shared = lc_sysMmapShared(sizeof(*shared));
+	if (!shared)
+		return (-12);
+	*shared = gLocal;
+	gCnt = shared;
+	return (0);
+}
+
+int	lc_child(void (*body)(void *), void *arg)
+{
+	long	parent;
+	long	pid;
+	long	r;
+	int		st;
+
+	if (lcShareCounts() != 0)
+		return (-12);
+	lcFlush();		/* or the child writes the pending output again */
+	parent = lc_sysGetpid();
+	pid = lc_sysFork();
+	if (pid < 0)
+		return ((int)pid);
+	if (pid == 0)
+	{
+		/* no orphan if the test is killed for its timeout */
+		lc_sysPrctl(LC_PR_SET_PDEATHSIG, LC_SIGKILL);
+		if (lc_sysGetppid() != parent)
+			lc_sysExit(1);
+		body(arg);
+		lcFlush();
+		lc_exitNow(0);
+	}
+	do
+		r = lc_sysWait4(pid, &st, 0);
+	while (r == -4);	/* -EINTR */
+	if (r < 0)
+		return ((int)r);
+	if ((st & 0x7f) == 0)
+		return (LC_EXIT((st >> 8) & 0xff));
+	return (LC_SIGNAL(st & 0x7f));
+}
+
+/**
+ * @brief Read a clock in nanoseconds.
+ *
+ * @param clk LC_CLOCK_REALTIME or LC_CLOCK_MONOTONIC.
+ * @return Nanoseconds, or 0 if the clock cannot be read.
+ */
+static long long	lcClockNs(int clk)
+{
+	struct lc_timespec	ts;
+
+	if (lc_sysClockGettime(clk, &ts) != 0)
+		return (0);
+	return (ts.sec * LC_NS_PER_SEC + ts.nsec);
+}
+
+long long	lc_now(void)
+{
+	return (lcClockNs(LC_CLOCK_MONOTONIC));
+}
+
+long long	lc_nowReal(void)
+{
+	return (lcClockNs(LC_CLOCK_REALTIME));
+}
+
+void	lc_sleep(long long ns)
+{
+	struct lc_timespec	end;
+	long long			t;
+
+	if (ns <= 0)
+		return ;
+	t = lc_now() + ns;
+	end.sec = (long)(t / LC_NS_PER_SEC);
+	end.nsec = (long)(t % LC_NS_PER_SEC);
+	while (lc_sysClockNanosleep(LC_CLOCK_MONOTONIC, LC_TIMER_ABSTIME,
+			&end, 0) == -4)	/* -EINTR: same deadline, sleep again */
+		;
+}
+
 /* ----- Failure reporting ----- */
 
 /**
@@ -356,7 +557,7 @@ char	*lc_tmpPath(char *buf, lc_size_t size, const char *tag)
  */
 static void	lcFailBegin(const char *file, int line, const char *text)
 {
-	gFailed++;
+	gCnt->failed++;
 	if (gProto)
 	{
 		gEscape = 0;
@@ -398,7 +599,7 @@ static void	lcFailEnd(void)
 
 int	lc_check(int ok, const char *file, int line, const char *text)
 {
-	gAsserts++;
+	gCnt->asserts++;
 	if (ok)
 		return (1);
 	lcFailBegin(file, line, text);
@@ -411,7 +612,7 @@ int		lc_checkInt(int ok,
 					const char	*file,	int			line,	const char	*text,
 					long long	a,		long long	b,		const char	*op)
 {
-	gAsserts++;
+	gCnt->asserts++;
 	if (ok)
 		return (1);
 	lcFailBegin(file, line, text);
@@ -429,7 +630,7 @@ int		lc_checkUint(int ok,
 					 const char			*file,	int					line,	const char	*text,
 					 unsigned long long	a,		unsigned long long	b,		const char	*op)
 {
-	gAsserts++;
+	gCnt->asserts++;
 	if (ok)
 		return (1);
 	lcFailBegin(file, line, text);
@@ -447,7 +648,7 @@ int		lc_checkPtr(int ok,
 					const char	*file,	int			line, const char *text,
 					const void	*a,		const void	*b)
 {
-	gAsserts++;
+	gCnt->asserts++;
 	if (ok)
 		return (1);
 	lcFailBegin(file, line, text);
@@ -465,7 +666,7 @@ int		lc_checkStr(int wantEqual,
 	int			eq;
 	lc_size_t	i;
 
-	gAsserts++;
+	gCnt->asserts++;
 	if (a == 0 || b == 0)
 		eq = (a == b);
 	else
@@ -495,7 +696,7 @@ int		lc_checkMem(const char	*file,	int			line,	const char	*text,
 	const unsigned char	*pb = b;
 	lc_size_t			i;
 
-	gAsserts++;
+	gCnt->asserts++;
 	if (pa == 0 || pb == 0)
 	{
 		if (pa == pb)
@@ -522,7 +723,7 @@ int		lc_checkMem(const char	*file,	int			line,	const char	*text,
 
 void	lc_skip(const char *reason)
 {
-	gSkipped = 1;
+	gCnt->skipped = 1;
 	if (gProto)
 	{
 		lcs("@skip\t");
@@ -541,7 +742,7 @@ void	lc_skip(const char *reason)
 
 void	lc_unimplemented(const char *what)
 {
-	gUnimpl = 1;
+	gCnt->unimpl = 1;
 	if (gProto)
 	{
 		lcs("@unimpl\t");
@@ -606,36 +807,36 @@ static int	lcRunOne(const struct lc_test *t)
 {
 	const char	*status;
 
-	gAsserts = 0;
-	gFailed = 0;
-	gSkipped = 0;
-	gUnimpl = 0;
+	gCnt->asserts = 0;
+	gCnt->failed = 0;
+	gCnt->skipped = 0;
+	gCnt->unimpl = 0;
 	t->fn();
-	status = gFailed ? "fail" : gUnimpl ? "unimplemented" : gSkipped ? "skip" : "pass";
+	status = gCnt->failed ? "fail" : gCnt->unimpl ? "unimplemented" : gCnt->skipped ? "skip" : "pass";
 	if (gProto)
 	{
 		lcs("@end\t");
 		lcs(status);
 		lcc('\t');
-		lci(gAsserts);
+		lci(gCnt->asserts);
 		lcc('\t');
-		lci(gFailed);
+		lci(gCnt->failed);
 		lcc('\n');
 	}
 	else
 	{
-		lcs(gFailed ? "  FAIL  " : gUnimpl ? "  N/I   " : gSkipped ? "  SKIP  " : "  PASS  ");
+		lcs(gCnt->failed ? "  FAIL  " : gCnt->unimpl ? "  N/I   " : gCnt->skipped ? "  SKIP  " : "  PASS  ");
 		lcs(t->category);
 		lcc('/');
 		lcs(t->function);
 		lcc('/');
 		lcs(t->name);
 		lcs(" (");
-		lci(gAsserts);
+		lci(gCnt->asserts);
 		lcs(" checks)\n");
 	}
 	lcFlush();
-	return (gFailed != 0);
+	return (gCnt->failed != 0);
 }
 
 /**
@@ -715,7 +916,8 @@ static int	lcRunAll(void)
  *
  * fd 3 open at startup means "run by lcrun": events go there in the
  * machine protocol. After a test run with --run, the coverage counters
- * are written when the binary was built with COV=1.
+ * are written when the binary was built with COV=1 (see cov.c for the
+ * tests that end in exit() or a signal).
  *
  * @param argc Argument count.
  * @param argv Arguments.
@@ -742,6 +944,8 @@ int	main(int argc, char **argv)
 
 			if (!lcStreq(t->function, argv[2]) || !lcStreq(t->name, argv[3]))
 				continue ;
+			if (lc_covArmSignal && (t->expect & ~0xff) == LC_SIGNAL(0))
+				lc_covArmSignal(t->expect & 0xff);
 			failed = lcRunOne(t);
 			if (lc_covDump)
 				lc_covDump();

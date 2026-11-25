@@ -10,7 +10,7 @@
  * @file lc.h
  * @brief Test-side API: TEST, EXPECT_*, ASSERT_*, helpers.
  * @Created: 2026/11/23 04:44:31 by Moutig
- * @Updated: 2026/11/24 08:49:58 by Moutig
+ * @Updated: 2026/11/25 08:40:42 by Moutig
  *
  * One test file = one function of the libc under test:
  *
@@ -501,6 +501,113 @@ void	*lc_guarded(lc_size_t n);
 int		lc_unlink(const char *path);
 
 /**
+ * @brief A descriptor redirected to a temporary file (lc_captureStart).
+ *
+ * Opaque to the test: pass it to lc_captureStart() and lc_captureEnd().
+ */
+typedef struct lc_capture
+{
+	int	fd;		/* the captured descriptor */
+	int	saved;	/* copy of what @c fd was before, -1 if it was closed */
+	int	file;	/* the temporary file (unlinked), read back at the end */
+}	lc_capture;
+
+/**
+ * @brief Redirect descriptor @p fd to a temporary file.
+ *
+ * Everything written to @p fd until lc_captureEnd() goes to an unlinked
+ * file (nothing stays in /tmp, even if the test crashes). For the
+ * functions whose contract is what they write: perror, psignal, the
+ * assert message, printf on stdout, ...
+ *
+ * The descriptors kept by the capture are >= 10 and close-on-exec, so
+ * they never take the number the test is about to use.
+ *
+ * @param c  Capture state, filled here.
+ * @param fd Descriptor to capture (1 or 2 usually; @p fd may be closed:
+ *           it is closed again at the end).
+ * @return 0, or -errno (nothing is redirected).
+ */
+int		lc_captureStart(lc_capture *c, int fd);
+
+/**
+ * @brief Put descriptor @p fd back and read what was written to it.
+ *
+ * A stdio stream of the libc under test keeps what it buffered: fflush
+ * it before this call, or the bytes are written after the capture.
+ * Checks made during the capture are reported normally (the report of a
+ * run by hand, on fd 2, may land in the capture).
+ *
+ * @param c    State filled by lc_captureStart().
+ * @param buf  Receives the captured bytes, NUL-terminated (truncated to
+ *             @p size - 1; captured NUL bytes are kept).
+ * @param size Size of @p buf (may be 0: only the length is returned).
+ * @return Number of bytes written to @p fd during the capture (larger
+ *         than @p size - 1 when truncated), or -errno.
+ */
+long	lc_captureEnd(lc_capture *c, char *buf, lc_size_t size);
+
+/**
+ * @brief Run @p body in a child process and wait for it.
+ *
+ * For what must happen in another process: fork, _exit, abort, a
+ * signal that kills, the state after fork. The child calls
+ * body(arg), then ends with lc_exitNow(0) if @p body returns.
+ *
+ * EXPECT_* and ASSERT_* work in @p body: from the first lc_child() of
+ * a test, the check counters are shared with the children, so a check
+ * that fails in the child fails the test, even if the child then exits
+ * or dies. ASSERT_* leaves @p body (the child exits with 0).
+ *
+ * The child is created by a raw fork (lc_sysFork: the libc under test
+ * is not told) and is killed if the test process dies (timeout). Flush
+ * the stdio streams before: a child that calls exit() flushes what the
+ * parent had buffered too. A child killed by a signal writes no
+ * coverage data.
+ *
+ * @param body Code run in the child.
+ * @param arg  Argument passed to @p body.
+ * @return How the child ended, in the encoding of .expect:
+ *         LC_EXIT(n) (LC_EXIT(0) when @p body returns) or LC_SIGNAL(s);
+ *         -errno if the child could not be created.
+ */
+int		lc_child(void (*body)(void *), void *arg);
+
+/** Nanoseconds in one second, for lc_now() and lc_sleep(). */
+# define LC_NS_PER_SEC	1000000000LL
+
+/**
+ * @brief Monotonic time, without the libc under test.
+ *
+ * For timing what the libc does (nanosleep, sleep, *_timedwait): the
+ * difference of two calls is the elapsed time, whatever the wall clock
+ * does in between.
+ *
+ * @return Nanoseconds since an arbitrary start (CLOCK_MONOTONIC).
+ */
+long long	lc_now(void);
+
+/**
+ * @brief Wall-clock time, without the libc under test.
+ *
+ * The reference for time(), gettimeofday() and clock_gettime(
+ * CLOCK_REALTIME) of the libc.
+ *
+ * @return Nanoseconds since the Epoch (CLOCK_REALTIME).
+ */
+long long	lc_nowReal(void);
+
+/**
+ * @brief Sleep at least @p ns nanoseconds, without the libc under test.
+ *
+ * Sleeps until a monotonic deadline, so a signal handler that
+ * interrupts the sleep does not shorten it.
+ *
+ * @param ns Duration (<= 0: return at once).
+ */
+void		lc_sleep(long long ns);
+
+/**
  * @brief End the process now (exit_group).
  *
  * No atexit handler runs and no stdio stream is flushed: for tests that
@@ -517,5 +624,11 @@ void	lc_exitNow(int status) __attribute__((noreturn));
  * (weak symbol in lc.c).
  */
 void	lc_covDump(void);
+
+/**
+ * @brief Handle a signal cleanly and dump before exit
+ * @param sig The signal to look for
+ */
+void	lc_covArmSignal(int sig);
 
 #endif /* LC_H */

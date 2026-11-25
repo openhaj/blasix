@@ -10,7 +10,7 @@
  * @file sys.c
  * @brief Raw Linux syscalls for the framework.
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/24 05:12:58 by Moutig
+ * @Updated: 2026/11/25 08:41:11 by Moutig
  *
  * Every system call of the framework goes through lc_syscall3 /
  * lc_syscall6, a few lines of inline asm per architecture, so that the
@@ -19,7 +19,9 @@
  *
  * Path syscalls use their *at() form with AT_FDCWD: aarch64 (like every
  * recent Linux port) has no open, mkdir or unlink, only openat,
- * mkdirat and unlinkat, and the *at() form works on x86_64 too.
+ * mkdirat and unlinkat, and the *at() form works on x86_64 too. For
+ * the same reason pipe, dup2 and fork go through pipe2, dup3 and
+ * clone on both architectures.
  *
  * To add an architecture: its syscall numbers (LC_NR_*, from the
  * kernel's unistd.h for that arch) and the two lc_syscallN functions
@@ -47,6 +49,44 @@
 # define LC_NR_MMAP			9
 # define LC_NR_MPROTECT		10
 # define LC_NR_UNLINKAT		263
+# define LC_NR_GETTID		186
+# define LC_NR_TGKILL		234
+# define LC_NR_RT_SIGACTION	13
+# define LC_NR_RT_SIGRETURN	15
+# define LC_NR_READ			0
+# define LC_NR_LSEEK		8
+# define LC_NR_PIPE2		293
+# define LC_NR_DUP3			292
+# define LC_NR_CLONE		56
+# define LC_NR_WAIT4		61
+# define LC_NR_KILL			62
+# define LC_NR_GETPPID		110
+# define LC_NR_PRCTL		157
+# define LC_NR_CLOCK_GETTIME	228
+# define LC_NR_CLOCK_NANOSLEEP	230
+
+/*
+ * Signal return trampoline. The x86_64 kernel refuses to deliver a
+ * signal to a handler installed without SA_RESTORER (it kills the
+ * process with SIGSEGV instead), so lc_sysSigaction() always sets this.
+ */
+__asm__(
+	".text\n"
+	"\t.p2align 4\n"
+	"\t.globl lc_sysSigRestorer\n"
+	"\t.hidden lc_sysSigRestorer\n"
+	"\t.type lc_sysSigRestorer, @function\n"
+	"lc_sysSigRestorer:\n"
+	"\tmovq $15, %rax\n"
+	"\tsyscall\n"
+	"\t.size lc_sysSigRestorer, . - lc_sysSigRestorer\n");
+
+/** The trampoline above (rt_sigreturn = LC_NR_RT_SIGRETURN). */
+void	lc_sysSigRestorer(void);
+
+/** SA_RESTORER: sa_restorer is set. */
+# define LC_SA_RESTORER		0x04000000UL
+# define LC_SIG_RESTORER	lc_sysSigRestorer
 
 /**
  * @brief System call with up to 3 arguments.
@@ -115,6 +155,24 @@ static long	lc_syscall6(long nr, long a, long b, long c, long d, long e, long f)
 # define LC_NR_MMAP			222
 # define LC_NR_MPROTECT		226
 # define LC_NR_UNLINKAT		35
+# define LC_NR_GETTID		178
+# define LC_NR_TGKILL		131
+# define LC_NR_RT_SIGACTION	134
+# define LC_NR_READ			63
+# define LC_NR_LSEEK		62
+# define LC_NR_PIPE2		59
+# define LC_NR_DUP3			24
+# define LC_NR_CLONE		220
+# define LC_NR_WAIT4		260
+# define LC_NR_KILL			129
+# define LC_NR_GETPPID		173
+# define LC_NR_PRCTL		167
+# define LC_NR_CLOCK_GETTIME	113
+# define LC_NR_CLOCK_NANOSLEEP	115
+
+/* aarch64 returns through the vDSO trampoline: no SA_RESTORER needed. */
+# define LC_SA_RESTORER		0UL
+# define LC_SIG_RESTORER	((void (*)(void))0)
 
 /**
  * @brief System call with up to 3 arguments.
@@ -214,16 +272,34 @@ long	lc_sysClose(int fd)
 	return (lc_syscall3(LC_NR_CLOSE, fd, 0, 0));
 }
 
-void	*lc_sysMmap(unsigned long len)
+/**
+ * @brief Anonymous read/write mapping.
+ *
+ * @param len   Size in bytes.
+ * @param flags MAP_PRIVATE (0x02) or MAP_SHARED (0x01), MAP_ANONYMOUS
+ *              (0x20) is added.
+ * @return Start of the mapping, or NULL on failure.
+ */
+static void	*lcMmapAnon(unsigned long len, long flags)
 {
 	long	r;
 
-	/* PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, no fd */
-	r = lc_syscall6(LC_NR_MMAP, 0, (long)len, 3, 0x22, -1, 0);
+	/* PROT_READ | PROT_WRITE, no fd */
+	r = lc_syscall6(LC_NR_MMAP, 0, (long)len, 3, flags | 0x20, -1, 0);
 	/* mmap returns an address, or -errno in [-4095, -1] */
 	if (r < 0 && r > -4096)
 		return (0);
 	return ((void *)r);
+}
+
+void	*lc_sysMmap(unsigned long len)
+{
+	return (lcMmapAnon(len, 0x02));
+}
+
+void	*lc_sysMmapShared(unsigned long len)
+{
+	return (lcMmapAnon(len, 0x01));
 }
 
 long	lc_sysMprotect(void *addr, unsigned long len, int prot)
@@ -234,4 +310,110 @@ long	lc_sysMprotect(void *addr, unsigned long len, int prot)
 long	lc_sysUnlink(const char *path)
 {
 	return (lc_syscall6(LC_NR_UNLINKAT, LC_AT_FDCWD, (long)path, 0, 0, 0, 0));
+}
+
+long	lc_sysGettid(void)
+{
+	return (lc_syscall3(LC_NR_GETTID, 0, 0, 0));
+}
+
+long	lc_sysTgkill(long tgid, long tid, int sig)
+{
+	return (lc_syscall3(LC_NR_TGKILL, tgid, tid, sig));
+}
+
+/**
+ * Layout the kernel expects from rt_sigaction (struct sigaction of
+ * <asm/signal.h>, same on x86_64 and aarch64), not the libc's one.
+ */
+struct lc_kSigaction
+{
+	void			(*handler)(int);
+	unsigned long	flags;
+	void			(*restorer)(void);
+	unsigned long	mask;		/* 64 signals: sigsetsize = 8 */
+};
+
+long	lc_sysSigaction(int sig, void (*handler)(int), unsigned long flags)
+{
+	struct lc_kSigaction	act;
+
+	act.handler = handler;
+	act.flags = flags | LC_SA_RESTORER;
+	act.restorer = LC_SIG_RESTORER;
+	act.mask = 0;
+	return (lc_syscall6(LC_NR_RT_SIGACTION, sig, (long)&act, 0,
+			(long)sizeof(act.mask), 0, 0));
+}
+
+long	lc_sysRead(int fd, void *buf, unsigned long n)
+{
+	return (lc_syscall3(LC_NR_READ, fd, (long)buf, (long)n));
+}
+
+long	lc_sysLseek(int fd, long off, int whence)
+{
+	return (lc_syscall3(LC_NR_LSEEK, fd, off, whence));
+}
+
+long	lc_sysPipe(int fds[2], int flags)
+{
+	return (lc_syscall3(LC_NR_PIPE2, (long)fds, flags, 0));
+}
+
+long	lc_sysDup2(int oldfd, int newfd)
+{
+	long	r;
+
+	if (oldfd == newfd)
+	{
+		r = lc_sysFcntl(oldfd, LC_F_GETFD, 0);
+		return (r < 0 ? r : newfd);
+	}
+	return (lc_syscall3(LC_NR_DUP3, oldfd, newfd, 0));
+}
+
+/** Signal sent to the parent when the child ends. */
+#define LC_SIGCHLD	17
+
+/*
+ * clone(SIGCHLD, 0, ...) is fork(): no new stack (0 = share the
+ * caller's, copied on write), no tid or tls pointer. x86_64 and aarch64
+ * order the last three arguments differently; they are all 0 here.
+ */
+long	lc_sysFork(void)
+{
+	return (lc_syscall6(LC_NR_CLONE, LC_SIGCHLD, 0, 0, 0, 0, 0));
+}
+
+long	lc_sysWait4(long pid, int *status, int options)
+{
+	return (lc_syscall6(LC_NR_WAIT4, pid, (long)status, options, 0, 0, 0));
+}
+
+long	lc_sysKill(long pid, int sig)
+{
+	return (lc_syscall3(LC_NR_KILL, pid, sig, 0));
+}
+
+long	lc_sysGetppid(void)
+{
+	return (lc_syscall3(LC_NR_GETPPID, 0, 0, 0));
+}
+
+long	lc_sysPrctl(int op, unsigned long arg)
+{
+	return (lc_syscall6(LC_NR_PRCTL, op, (long)arg, 0, 0, 0, 0));
+}
+
+long	lc_sysClockGettime(int clk, struct lc_timespec *ts)
+{
+	return (lc_syscall3(LC_NR_CLOCK_GETTIME, clk, (long)ts, 0));
+}
+
+long	lc_sysClockNanosleep(int clk, int flags, const struct lc_timespec *req,
+			struct lc_timespec *rem)
+{
+	return (lc_syscall6(LC_NR_CLOCK_NANOSLEEP, clk, flags, (long)req,
+			(long)rem, 0, 0));
 }
