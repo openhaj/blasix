@@ -114,6 +114,7 @@ inttypes_HDRS := \
 
 stdlib_UNITS := \
 	defs \
+	memory/calloc \
 	memory/free \
 	memory/malloc \
 
