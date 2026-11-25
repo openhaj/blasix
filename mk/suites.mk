@@ -117,6 +117,8 @@ stdlib_UNITS := \
 	memory/aligned_alloc \
 	memory/calloc \
 	memory/free \
+	memory/free_aligned_sized \
+	memory/free_sized \
 	memory/malloc \
 	memory/posix_memalign \
 	memory/realloc \
