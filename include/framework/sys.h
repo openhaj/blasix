@@ -10,7 +10,7 @@
  * @file sys.h
  * @brief Raw Linux syscalls used by the framework (x86_64, aarch64).
  * @Created: 2026/11/23 04:18:40 by Moutig
- * @Updated: 2026/11/24 05:13:17 by Moutig
+ * @Updated: 2026/11/25 07:55:55 by Moutig
  *
  * The framework must not depend on the libc under test: these are the
  * only "system" functions it uses. They return what the kernel returns
@@ -111,6 +111,36 @@ long	lc_sysMprotect(void *addr, unsigned long len, int prot);
  */
 long	lc_sysUnlink(const char *path);
 
+/**
+ * @brief gettid(2).
+ *
+ * @return Thread id of the caller.
+ */
+long	lc_sysGettid(void);
+
+/**
+ * @brief tgkill(2): send a signal to one thread.
+ *
+ * @param tgid Process (thread group) id.
+ * @param tid  Thread id.
+ * @param sig  Signal number.
+ * @return 0, or -errno.
+ */
+long	lc_sysTgkill(long tgid, long tid, int sig);
+
+/**
+ * @brief rt_sigaction(2): install a handler, empty mask.
+ *
+ * Sets the restorer the kernel requires on x86_64 (SA_RESTORER);
+ * the previous action is not returned.
+ *
+ * @param sig     Signal number.
+ * @param handler Handler (one int argument).
+ * @param flags   LC_SA_* flags.
+ * @return 0, or -errno (-EINVAL for SIGKILL and SIGSTOP).
+ */
+long	lc_sysSigaction(int sig, void (*handler)(int), unsigned long flags);
+
 /* ----- Constants (Linux values, same on x86_64 and aarch64) ----- */
 
 /** fcntl command: get the descriptor flags (used to probe fd 3). */
@@ -124,5 +154,11 @@ long	lc_sysUnlink(const char *path);
 
 /** open flag: truncate the file to length 0. */
 # define LC_O_TRUNC		01000
+
+/** sigaction flag: back to SIG_DFL when the handler is entered. */
+# define LC_SA_RESETHAND	0x80000000UL
+
+/** sigaction flag: do not block the signal inside its handler. */
+# define LC_SA_NODEFER		0x40000000UL
 
 #endif /* LC_SYS_H */

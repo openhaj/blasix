@@ -10,7 +10,7 @@
  * @file lc.c
  * @brief Test-side engine: checks, output protocol, main().
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/24 10:28:08 by Moutig
+ * @Updated: 2026/11/25 08:00:24 by Moutig
  *
  * Linked into every test binary, compiled against the libc under
  * test but calling none of its functions (see sys.c).
@@ -59,6 +59,17 @@ extern const struct lc_test	__stop_lc_tests[] __attribute__((weak));
  * otherwise and main() does not call it.
  */
 void	lc_covDump(void) __attribute__((weak));
+
+/**
+ * @brief Dump the coverage counters when signal @p sig kills the test
+ *        (cov.c).
+ *
+ * Coverage builds only, like lc_covDump(). Called for a test that
+ * expects LC_SIGNAL(sig), before its body runs.
+ *
+ * @param sig Signal number.
+ */
+void	lc_covArmSignal(int sig) __attribute__((weak));
 
 /* ----- State ----- */
 
@@ -294,6 +305,9 @@ int	lc_unlink(const char *path)
 
 void	lc_exitNow(int status)
 {
+	/* Raw exit_group skips the destructors: dump here. */
+	if (lc_covDump)
+		lc_covDump();
 	lc_sysExit(status);
 }
 
@@ -715,7 +729,8 @@ static int	lcRunAll(void)
  *
  * fd 3 open at startup means "run by lcrun": events go there in the
  * machine protocol. After a test run with --run, the coverage counters
- * are written when the binary was built with COV=1.
+ * are written when the binary was built with COV=1 (see cov.c for the
+ * tests that end in exit() or a signal).
  *
  * @param argc Argument count.
  * @param argv Arguments.
@@ -742,6 +757,8 @@ int	main(int argc, char **argv)
 
 			if (!lcStreq(t->function, argv[2]) || !lcStreq(t->name, argv[3]))
 				continue ;
+			if (lc_covArmSignal && (t->expect & ~0xff) == LC_SIGNAL(0))
+				lc_covArmSignal(t->expect & 0xff);
 			failed = lcRunOne(t);
 			if (lc_covDump)
 				lc_covDump();

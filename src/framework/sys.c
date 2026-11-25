@@ -10,7 +10,7 @@
  * @file sys.c
  * @brief Raw Linux syscalls for the framework.
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/24 05:12:58 by Moutig
+ * @Updated: 2026/11/25 08:00:38 by Moutig
  *
  * Every system call of the framework goes through lc_syscall3 /
  * lc_syscall6, a few lines of inline asm per architecture, so that the
@@ -47,6 +47,33 @@
 # define LC_NR_MMAP			9
 # define LC_NR_MPROTECT		10
 # define LC_NR_UNLINKAT		263
+# define LC_NR_GETTID		186
+# define LC_NR_TGKILL		234
+# define LC_NR_RT_SIGACTION	13
+# define LC_NR_RT_SIGRETURN	15
+
+/*
+ * Signal return trampoline. The x86_64 kernel refuses to deliver a
+ * signal to a handler installed without SA_RESTORER (it kills the
+ * process with SIGSEGV instead), so lc_sysSigaction() always sets this.
+ */
+__asm__(
+	".text\n"
+	"\t.p2align 4\n"
+	"\t.globl lc_sysSigRestorer\n"
+	"\t.hidden lc_sysSigRestorer\n"
+	"\t.type lc_sysSigRestorer, @function\n"
+	"lc_sysSigRestorer:\n"
+	"\tmovq $15, %rax\n"
+	"\tsyscall\n"
+	"\t.size lc_sysSigRestorer, . - lc_sysSigRestorer\n");
+
+/** The trampoline above (rt_sigreturn = LC_NR_RT_SIGRETURN). */
+void	lc_sysSigRestorer(void);
+
+/** SA_RESTORER: sa_restorer is set. */
+# define LC_SA_RESTORER		0x04000000UL
+# define LC_SIG_RESTORER	lc_sysSigRestorer
 
 /**
  * @brief System call with up to 3 arguments.
@@ -115,6 +142,13 @@ static long	lc_syscall6(long nr, long a, long b, long c, long d, long e, long f)
 # define LC_NR_MMAP			222
 # define LC_NR_MPROTECT		226
 # define LC_NR_UNLINKAT		35
+# define LC_NR_GETTID		178
+# define LC_NR_TGKILL		131
+# define LC_NR_RT_SIGACTION	134
+
+/* aarch64 returns through the vDSO trampoline: no SA_RESTORER needed. */
+# define LC_SA_RESTORER		0UL
+# define LC_SIG_RESTORER	((void (*)(void))0)
 
 /**
  * @brief System call with up to 3 arguments.
@@ -234,4 +268,38 @@ long	lc_sysMprotect(void *addr, unsigned long len, int prot)
 long	lc_sysUnlink(const char *path)
 {
 	return (lc_syscall6(LC_NR_UNLINKAT, LC_AT_FDCWD, (long)path, 0, 0, 0, 0));
+}
+
+long	lc_sysGettid(void)
+{
+	return (lc_syscall3(LC_NR_GETTID, 0, 0, 0));
+}
+
+long	lc_sysTgkill(long tgid, long tid, int sig)
+{
+	return (lc_syscall3(LC_NR_TGKILL, tgid, tid, sig));
+}
+
+/**
+ * Layout the kernel expects from rt_sigaction (struct sigaction of
+ * <asm/signal.h>, same on x86_64 and aarch64), not the libc's one.
+ */
+struct lc_kSigaction
+{
+	void			(*handler)(int);
+	unsigned long	flags;
+	void			(*restorer)(void);
+	unsigned long	mask;		/* 64 signals: sigsetsize = 8 */
+};
+
+long	lc_sysSigaction(int sig, void (*handler)(int), unsigned long flags)
+{
+	struct lc_kSigaction	act;
+
+	act.handler = handler;
+	act.flags = flags | LC_SA_RESTORER;
+	act.restorer = LC_SIG_RESTORER;
+	act.mask = 0;
+	return (lc_syscall6(LC_NR_RT_SIGACTION, sig, (long)&act, 0,
+			(long)sizeof(act.mask), 0, 0));
 }

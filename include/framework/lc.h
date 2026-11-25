@@ -10,7 +10,7 @@
  * @file lc.h
  * @brief Test-side API: TEST, EXPECT_*, ASSERT_*, helpers.
  * @Created: 2026/11/23 04:44:31 by Moutig
- * @Updated: 2026/11/24 08:49:58 by Moutig
+ * @Updated: 2026/11/25 08:00:10 by Moutig
  *
  * One test file = one function of the libc under test:
  *
@@ -517,5 +517,11 @@ void	lc_exitNow(int status) __attribute__((noreturn));
  * (weak symbol in lc.c).
  */
 void	lc_covDump(void);
+
+/**
+ * @brief Handle a signal cleanly and dump before exit
+ * @param sig The signal to look for
+ */
+void	lc_covArmSignal(int sig);
 
 #endif /* LC_H */
