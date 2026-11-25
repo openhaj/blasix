@@ -10,7 +10,7 @@
  * @file exec.c
  * @brief The process pool that runs the tests.
  * @Created: 2026/11/24 08:15:05 by Moutig
- * @Updated: 2026/11/24 10:31:01 by Moutig
+ * @Updated: 2026/11/25 09:20:51 by Moutig
  *
  * Each test runs as `bin --run FUNC NAME` in a fresh process (its own
  * process group), with:
@@ -19,6 +19,8 @@
  * A poll loop multiplexes up to -j children, kills the group of a
  * test that outlives its timeout, and reaps with wait4 to get the
  * CPU time and the peak RSS.
+ *
+ * Tests whose result came from the cache (t->cached) are not run.
  *
  * The status of a test is decided by finish() from three sources: the
  * events on fd 3 ("@end" pass / fail / skip, the checks), how the
@@ -425,6 +427,8 @@ void	runAll(t_run *r)
 {
 	t_slot			*slots;
 	struct pollfd	*pfd;
+	t_test			**todo;
+	size_t			nTodo;
 	size_t			next;
 	size_t			done;
 	size_t			total;
@@ -436,7 +440,12 @@ void	runAll(t_run *r)
 	pfd = xmalloc((size_t)r->o.jobs * 2 * sizeof(*pfd));
 	for (int i = 0; i < r->o.jobs; i++)
 		slots[i].pid = 0;
-	total = r->nTests * (size_t)r->o.repeat;
+	todo = xmalloc((r->nTests + 1) * sizeof(*todo));
+	nTodo = 0;
+	for (size_t i = 0; i < r->nTests; i++)
+		if (!r->tests[i].cached)
+			todo[nTodo++] = &r->tests[i];
+	total = nTodo * (size_t)r->o.repeat;
 	next = 0;
 	done = 0;
 	failed = 0;
@@ -449,7 +458,7 @@ void	runAll(t_run *r)
 		{
 			if (slots[i].pid != 0)
 				continue ;
-			if (spawn(&slots[i], &r->tests[next % r->nTests]) < 0)
+			if (spawn(&slots[i], todo[next % nTodo]) < 0)
 			{
 				perror("lcrun: spawn");
 				exit(2);
@@ -520,6 +529,7 @@ void	runAll(t_run *r)
 		}
 	}
 	(void)active;
+	free(todo);
 	free(slots);
 	free(pfd);
 }

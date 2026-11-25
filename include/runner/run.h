@@ -10,11 +10,13 @@
  * @file run.h
  * @brief A run: units, tests, results, and how they are found and run (run/).
  * @Created: 2026/11/24 08:28:05 by Moutig
- * @Updated: 2026/11/24 11:53:26 by Moutig
+ * @Updated: 2026/11/25 09:28:18 by Moutig
  *
  * run/discover.c  sources of the suites, units of the target, their
  *                 tests, probe results;
- * run/exec.c      the process pool (fork + exec, pipes, timeouts).
+ * run/exec.c      the process pool (fork + exec, pipes, timeouts);
+ * run/cache.c     the result cache (-C): tests whose binary did not
+ *                 change are not run again.
  * Everything of one invocation lives in one t_run.
  */
 
@@ -73,6 +75,7 @@ typedef struct s_unit
 							   (or its first lines when none says "error"). */
 	char			*log;	/* If unavailable: the build log (first 64 KiB). */
 	const t_entry	*entry;	/* Spec entry, NULL if unknown. */
+	char			hash[17];	/* Hash of the binary (cache.c), "" until read. */
 }	t_unit;
 
 /** One test case and its result. */
@@ -102,6 +105,7 @@ typedef struct s_test
 	int			code;		/* Exit status, -1 if killed. */
 	char		*msgs;		/* @fail / @skip / @unimpl / @log lines, formatted. */
 	char		*out;		/* Captured stdout + stderr (truncated). */
+	int			cached;		/* Result taken from the cache, not run. */
 }	t_test;
 
 /** Command-line options (see usage() in main.c). */
@@ -126,6 +130,8 @@ typedef struct s_opts
 	int			lax;		/* -x: lax mode, visibility not checked. */
 	const char	*tsvOut;	/* -o: TSV results, or NULL. */
 	const char	*jsonOut;	/* -J: JSON results, or NULL. */
+	const char	*cacheFile;	/* -C: result cache, or NULL (no cache). */
+	char		**libcFiles;	/* -K: files the binaries load at run time. */
 }	t_opts;
 
 /** Everything about one invocation of lcrun. */
@@ -144,6 +150,7 @@ typedef struct s_run
 	size_t	nOutOfTarget;		/* Tests excluded by their since / until / opt. */
 	size_t	nBadVersion;		/* Tests whose since / until / opt is unknown. */
 	size_t	nUnitsOutOfTarget;	/* Units whose function the target lacks. */
+	size_t	nCached;			/* Tests whose result came from the cache. */
 	double	wallMs;				/* Wall time of the whole run. */
 }	t_run;
 
@@ -217,12 +224,45 @@ void		suitesFree(t_src *v, long n);
 /**
  * @brief Run every selected test (r->o.repeat times), r->o.jobs at a time.
  *
- * Fills the result fields of each t_test. Exits with status 2 if a
+ * Fills the result fields of each t_test, except those taken from the
+ * cache (t->cached). Exits with status 2 if a
  * process cannot be created.
  *
  * @param r Run.
  */
 void		runAll(t_run *r);
+
+/**
+ * @brief Take from the cache (-C) the result of every test whose binary,
+ *        timeout and run-time libc did not change since it was stored
+ *        (run/cache.c); runAll() does not run them (t->cached).
+ *
+ * Nothing without -C or with -r N > 1.
+ *
+ * @param r Run, after discover().
+ */
+void		cacheLoad(t_run *r);
+
+/**
+ * @brief Store the results of this run in the cache (-C), keeping the
+ *        entries of the units that were not selected.
+ *
+ * Timeouts and errors are stored but never reused (cacheStatus() says
+ * so). Nothing without -C or with -r N > 1.
+ *
+ * @param r Run, after runAll().
+ */
+void		cacheSave(t_run *r);
+
+/**
+ * @brief --cache-status: for every selected test, whether the next run
+ *        takes its result from the cache, and why not (new test, binary
+ *        or timeout changed, last run timed out, ...). Runs nothing.
+ *
+ * @param r Run, after discover().
+ * @return 0.
+ */
+int			cacheStatus(t_run *r);
 
 /**
  * @brief Add the results that come from the spec and the probes, once

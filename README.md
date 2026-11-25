@@ -17,6 +17,8 @@ make run CAT=string FUNC=strlen,strcmp       # only some functions
 make run-all                                 # the 8 standards, one line each
 make compare A=host B=hajlibc                # same target, two libcs
 make coverage LIBC=hajlibc                   # coverage of the libc (lcov tracefile)
+make cache-status                            # what the next run reruns, and why
+make cache-clean                             # forget the cached results (build kept)
 make spec-list STD=c11                       # what C11 requires
 make matrix                                  # tested / required, 8 standards
 make help                                    # all targets and options
@@ -38,7 +40,7 @@ which interfaces are required, which tests run, and (strict mode) which
 names the headers must not make visible.
 
 Other options: `TEST='glob'`, `V=1` (verbose), `Q=1` (quiet),
-`REPEAT=n` (flakiness), `TIMEOUT=s`, `JOBS=n` (parallel jobs, for the
+`REPEAT=n` (flakiness), `TIMEOUT=s`, `CACHE=0` (run every test again), `JOBS=n` (parallel jobs, for the
 build and the tests; default: the number of CPUs; `make -jN` sets the
 build jobs too), `PROBE=0`. On a terminal, the build and the run show a
 progress bar (units and probes built, tests done and failed so far).
@@ -101,6 +103,8 @@ make compare A=host B=mylibc                 # what differs from the host libc
 | `LIBC_CFLAGS` | flags every file needs; **no `-std` or feature macros**, the target sets them |
 | `LIBC_LDFLAGS` / `LIBC_LIBS` | link flags / libraries (after the objects) |
 | `LIBC_DEPS` | files whose change rebuilds the tests (e.g. `libc.a`) |
+| `LIBC_RUNTIME` | optional: the shared libraries the tests load at run time (`libc.so`); a change drops the result cache. Empty for a static libc |
+| `LIBC_ARCHIVE` | optional, a static libc: its archive (`libc.a`, in `LIBC_LIBS`). A change of the archive then relinks only the tests that use a changed member |
 | `libc-prepare` | recipe run before building (e.g. build the libc, or check it exists) |
 | `LIBC_LAX_CFLAGS` | optional, `LAX=1` only: macros that expose everything (e.g. `-D_DEFAULT_SOURCE`) |
 

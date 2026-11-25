@@ -10,7 +10,7 @@
  * @file console.c
  * @brief Console report of a run.
  * @Created: 2026/11/24 08:14:20 by Moutig
- * @Updated: 2026/11/24 11:55:16 by Moutig
+ * @Updated: 2026/11/25 09:20:08 by Moutig
  *
  * Failures, units that did not build, results per category (per
  * function with -v), conformance (report/conformance.c), slowest tests,
@@ -173,9 +173,10 @@ static void	sectionTests(const t_run *r)
 	{
 		const t_test	*t = &r->tests[i];
 
-		printf("  %s%-7s%s %s/%s/%s %s(%.1f ms, %d checks)%s\n",
+		printf("  %s%-7s%s %s/%s/%s %s(%.1f ms, %d checks%s)%s\n",
 			stColor(t->st), stLabel(t->st), C_RESET,
-			t->cat, t->func, t->name, C_DIM, t->ms, t->asserts, C_RESET);
+			t->cat, t->func, t->name, C_DIM, t->ms, t->asserts,
+			t->cached ? ", cached" : "", C_RESET);
 		if (t->st == ST_PASS && t->msgs)
 			printIndented(t->msgs, 20);
 	}
@@ -460,9 +461,12 @@ void	reportConsole(const t_run *r)
 		char	target[256];
 
 		targetDescribe(&r->o.target, target, sizeof(target));
-		printf("\n%slibc %s%s against %s: %d/%zu units built, %zu tests, "
-			"%ld checks, %.2f s wall, %d jobs\n", C_BOLD, r->o.libc, C_RESET,
-			target, units, r->nUnits, r->nTests, checks, r->wallMs / 1e3, r->o.jobs);
+		printf("\n%slibc %s%s against %s: %d/%zu units built, %zu tests",
+			C_BOLD, r->o.libc, C_RESET, target, units, r->nUnits, r->nTests);
+		if (r->nCached)
+			printf(" (%zu from the cache)", r->nCached);
+		printf(", %ld checks, %.2f s wall, %d jobs\n", checks, r->wallMs / 1e3,
+			r->o.jobs);
 		sectionOutOfTarget(r);
 	}
 	if (ran && n[ST_PASS] == ran)

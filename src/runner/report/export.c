@@ -10,7 +10,7 @@
  * @file export.c
  * @brief Results of a run as TSV and JSON.
  * @Created: 2026/11/24 08:14:32 by Moutig
- * @Updated: 2026/11/24 11:55:19 by Moutig
+ * @Updated: 2026/11/25 09:20:19 by Moutig
  *
  * TSV: one row per test (the @not_in_target, @hidden and @reject_* results
  * included), plus one @interface row per required interface
@@ -135,8 +135,9 @@ int	reportJson(const t_run *r, const char *path)
 		fprintf(fp, ", \"line\": %d, \"status\": \"%s\", \"ms\": %.3f, "
 			"\"cpu_ms\": %.3f, \"rss_kb\": %ld, \"checks\": %d, \"failed\": %d, "
 			"\"runs\": %d, \"passes\": %d, \"signal\": %d, \"exit\": %d, "
-			"\"messages\": ", t->line, statusName(t->st), t->ms, t->cpuMs,
-			t->rssKb, t->asserts, t->failed, t->runs, t->passes, t->sig, t->code);
+			"\"cached\": %s, \"messages\": ", t->line, statusName(t->st), t->ms,
+			t->cpuMs, t->rssKb, t->asserts, t->failed, t->runs, t->passes, t->sig,
+			t->code, t->cached ? "true" : "false");
 		jsonStr(fp, t->msgs);
 		fprintf(fp, ", \"output\": ");
 		jsonStr(fp, t->out);

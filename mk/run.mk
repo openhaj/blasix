@@ -1,6 +1,21 @@
 # run.mk - running the tests, comparing libcs, spec tools, coverage.
 #
-# Options: TEST='glob' V=1 Q=1 REPEAT=n TIMEOUT=s JOBS=n PROBE=0
+# Options: TEST='glob' V=1 Q=1 REPEAT=n TIMEOUT=s JOBS=n PROBE=0 CACHE=0
+#
+# Result cache ($(OUT)/cache.tsv): a test whose binary, timeout and
+# run-time libc (LIBC_RUNTIME) did not change since its last run is not
+# run again (src/runner/run/cache.c). CACHE=0 runs every test. Never
+# used for coverage: the tests must run to write their counters.
+#   make cache-status   build, then say which tests the next run takes
+#                       from the cache and why the others run (V=1: all)
+#   make cache-clean    forget the results of this libc (every target);
+#                       the build is kept
+
+CACHE		?= 1
+LIBC_RUNTIME	?=
+lc_empty	:=
+lc_space	:= $(lc_empty) $(lc_empty)
+LC_CACHE	:= $(if $(filter 1,$(CACHE)),$(if $(filter 1,$(COV)),,$(OUT)/cache.tsv))
 
 LCFLAGS		:= $(LCTARGET) $(LCPATHS) -L $(LIBC) -j $(JOBS)
 LCFLAGS		+= $(if $(filter 1,$(PROBE)),-P $(OUT)/probe)
@@ -8,9 +23,11 @@ LCFLAGS		+= $(if $(CAT),-c $(CAT)) $(if $(FUNC),-f $(FUNC))
 LCFLAGS		+= $(if $(TEST),-t '$(TEST)') $(if $(filter 1,$(V)),-v)
 LCFLAGS		+= $(if $(filter 1,$(Q)),-q) $(if $(REPEAT),-r $(REPEAT))
 LCFLAGS		+= $(if $(TIMEOUT),-T $(TIMEOUT))
+LCFLAGS		+= $(if $(LC_CACHE),-C $(LC_CACHE))
+LCFLAGS		+= $(if $(strip $(LIBC_RUNTIME)),-K $(subst $(lc_space),$(comma),$(strip $(LIBC_RUNTIME))))
 
 .PHONY: run run-all list compare spec-list spec-check matrix todo options \
-	standards coverage
+	standards coverage cache-status cache-clean
 
 run: build
 	@$(RUNNER) $(LCFLAGS) -o $(OUT)/results.tsv -J $(OUT)/results.json $(OUT)/bin
@@ -21,6 +38,12 @@ run-all: $(RUNNER)
 		printf '%-11s ' "$$s"; \
 		$(MAKE) --no-print-directory run STD=$$s Q=1 2>&1 | tail -1; \
 	done
+
+cache-status: build
+	@$(RUNNER) $(LCFLAGS) --cache-status $(OUT)/bin
+
+cache-clean:
+	rm -f $(BUILD_DIR)/$(LIBC)/*/cache.tsv
 
 list: build
 	@$(RUNNER) $(LCFLAGS) -l $(OUT)/bin

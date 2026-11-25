@@ -37,6 +37,7 @@ LC_LIBC_BUILT	:= $(HAJ_LIB)
 endif
 LC_NM			:= $(if $(filter llvm-ar,$(notdir $(LC_AR))),llvm-nm,$(or $(shell command -v gcc-nm 2>/dev/null),nm))
 
+# Static: a new archive relinks only what pulls a changed member (tests.mk).
 LIBC_ARCHIVE	:= $(OUT)/libhajc.a
 LIBC_CC			:= $(CC)
 LIBC_CPPFLAGS	:= -nostdinc $(HAJ_CPPFLAGS)

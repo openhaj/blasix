@@ -12,12 +12,14 @@ RUNNER_SRCS		:= \
 	report/console.c \
 	report/export.c \
 	run/discover.c \
+	run/cache.c \
 	run/exec.c \
 	run/virtual.c \
 	spec/database.c \
 	spec/require.c \
 	spec/standards.c \
 	spec/visibility.c \
+	tools/archive.c \
 	tools/check.c \
 	tools/coverage.c \
 	tools/list.c \
