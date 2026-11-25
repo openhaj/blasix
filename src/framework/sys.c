@@ -10,7 +10,7 @@
  * @file sys.c
  * @brief Raw Linux syscalls for the framework.
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/25 08:18:14 by Moutig
+ * @Updated: 2026/11/25 08:35:25 by Moutig
  *
  * Every system call of the framework goes through lc_syscall3 /
  * lc_syscall6, a few lines of inline asm per architecture, so that the
@@ -61,6 +61,7 @@
 # define LC_NR_WAIT4		61
 # define LC_NR_KILL			62
 # define LC_NR_GETPPID		110
+# define LC_NR_PRCTL		157
 
 /*
  * Signal return trampoline. The x86_64 kernel refuses to deliver a
@@ -163,6 +164,7 @@ static long	lc_syscall6(long nr, long a, long b, long c, long d, long e, long f)
 # define LC_NR_WAIT4		260
 # define LC_NR_KILL			129
 # define LC_NR_GETPPID		173
+# define LC_NR_PRCTL		167
 
 /* aarch64 returns through the vDSO trampoline: no SA_RESTORER needed. */
 # define LC_SA_RESTORER		0UL
@@ -266,16 +268,34 @@ long	lc_sysClose(int fd)
 	return (lc_syscall3(LC_NR_CLOSE, fd, 0, 0));
 }
 
-void	*lc_sysMmap(unsigned long len)
+/**
+ * @brief Anonymous read/write mapping.
+ *
+ * @param len   Size in bytes.
+ * @param flags MAP_PRIVATE (0x02) or MAP_SHARED (0x01), MAP_ANONYMOUS
+ *              (0x20) is added.
+ * @return Start of the mapping, or NULL on failure.
+ */
+static void	*lcMmapAnon(unsigned long len, long flags)
 {
 	long	r;
 
-	/* PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, no fd */
-	r = lc_syscall6(LC_NR_MMAP, 0, (long)len, 3, 0x22, -1, 0);
+	/* PROT_READ | PROT_WRITE, no fd */
+	r = lc_syscall6(LC_NR_MMAP, 0, (long)len, 3, flags | 0x20, -1, 0);
 	/* mmap returns an address, or -errno in [-4095, -1] */
 	if (r < 0 && r > -4096)
 		return (0);
 	return ((void *)r);
+}
+
+void	*lc_sysMmap(unsigned long len)
+{
+	return (lcMmapAnon(len, 0x02));
+}
+
+void	*lc_sysMmapShared(unsigned long len)
+{
+	return (lcMmapAnon(len, 0x01));
 }
 
 long	lc_sysMprotect(void *addr, unsigned long len, int prot)
@@ -375,4 +395,9 @@ long	lc_sysKill(long pid, int sig)
 long	lc_sysGetppid(void)
 {
 	return (lc_syscall3(LC_NR_GETPPID, 0, 0, 0));
+}
+
+long	lc_sysPrctl(int op, unsigned long arg)
+{
+	return (lc_syscall6(LC_NR_PRCTL, op, (long)arg, 0, 0, 0, 0));
 }

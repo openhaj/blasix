@@ -10,7 +10,7 @@
  * @file lc.h
  * @brief Test-side API: TEST, EXPECT_*, ASSERT_*, helpers.
  * @Created: 2026/11/23 04:44:31 by Moutig
- * @Updated: 2026/11/25 08:25:55 by Moutig
+ * @Updated: 2026/11/25 08:32:21 by Moutig
  *
  * One test file = one function of the libc under test:
  *
@@ -546,6 +546,32 @@ int		lc_captureStart(lc_capture *c, int fd);
  *         than @p size - 1 when truncated), or -errno.
  */
 long	lc_captureEnd(lc_capture *c, char *buf, lc_size_t size);
+
+/**
+ * @brief Run @p body in a child process and wait for it.
+ *
+ * For what must happen in another process: fork, _exit, abort, a
+ * signal that kills, the state after fork. The child calls
+ * body(arg), then ends with lc_exitNow(0) if @p body returns.
+ *
+ * EXPECT_* and ASSERT_* work in @p body: from the first lc_child() of
+ * a test, the check counters are shared with the children, so a check
+ * that fails in the child fails the test, even if the child then exits
+ * or dies. ASSERT_* leaves @p body (the child exits with 0).
+ *
+ * The child is created by a raw fork (lc_sysFork: the libc under test
+ * is not told) and is killed if the test process dies (timeout). Flush
+ * the stdio streams before: a child that calls exit() flushes what the
+ * parent had buffered too. A child killed by a signal writes no
+ * coverage data.
+ *
+ * @param body Code run in the child.
+ * @param arg  Argument passed to @p body.
+ * @return How the child ended, in the encoding of .expect:
+ *         LC_EXIT(n) (LC_EXIT(0) when @p body returns) or LC_SIGNAL(s);
+ *         -errno if the child could not be created.
+ */
+int		lc_child(void (*body)(void *), void *arg);
 
 /**
  * @brief End the process now (exit_group).

@@ -10,7 +10,7 @@
  * @file sys.h
  * @brief Raw Linux syscalls used by the framework (x86_64, aarch64).
  * @Created: 2026/11/23 04:18:40 by Moutig
- * @Updated: 2026/11/25 08:26:27 by Moutig
+ * @Updated: 2026/11/25 08:32:45 by Moutig
  *
  * The framework must not depend on the libc under test: these are the
  * only "system" functions it uses. They return what the kernel returns
@@ -92,6 +92,14 @@ long	lc_sysClose(int fd);
  * @return Start of the mapping, or NULL on failure.
  */
 void	*lc_sysMmap(unsigned long len);
+
+/**
+ * @brief Anonymous shared read/write mapping: still shared after fork.
+ *
+ * @param len Size in bytes.
+ * @return Start of the mapping, or NULL on failure.
+ */
+void	*lc_sysMmapShared(unsigned long len);
 
 /**
  * @brief mprotect(2).
@@ -220,6 +228,15 @@ long	lc_sysKill(long pid, int sig);
  */
 long	lc_sysGetppid(void);
 
+/**
+ * @brief prctl(2), one integer argument.
+ *
+ * @param op  LC_PR_* operation.
+ * @param arg Argument of the operation.
+ * @return Result of the operation, or -errno.
+ */
+long	lc_sysPrctl(int op, unsigned long arg);
+
 /* ----- Constants (Linux values, same on x86_64 and aarch64) ----- */
 
 /** fcntl command: get the descriptor flags (used to probe fd 3). */
@@ -257,6 +274,12 @@ long	lc_sysGetppid(void);
 
 /** wait4 option: return 0 at once if the child is still running. */
 # define LC_WNOHANG		1
+
+/** prctl: signal received when the parent dies. */
+# define LC_PR_SET_PDEATHSIG	1
+
+/** Signal numbers (same on x86_64 and aarch64). */
+# define LC_SIGKILL		9
 
 /** sigaction flag: back to SIG_DFL when the handler is entered. */
 # define LC_SA_RESETHAND	0x80000000UL
