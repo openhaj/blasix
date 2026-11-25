@@ -50,6 +50,9 @@
 #     (POSIX.1-2001) and in POSIX.1-2024, where it is removed (XSH 2.2.1);
 #   - no Annex K: with OPTS=LIB_EXT1 its interfaces are undeclared and the
 #     K.3.1.1p4 reject probes are accepted.
+#   - realloc(p, 0) frees p and returns a null pointer without setting
+#     errno to EINVAL (XSH realloc() RETURN VALUE, POSIX.1-2024 [OB]):
+#     stdlib/realloc/zero_size_is_null_with_einval_or_a_new_object fails.
 
 header stdlib.h
 

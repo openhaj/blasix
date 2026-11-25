@@ -10,7 +10,7 @@
  * @file stdlib_cases.h
  * @brief Shared helpers and cases of the <stdlib.h> units.
  * @Created: 2026/11/25 13:05:29 by Moutig
- * @Updated: 2026/11/25 13:08:28 by Moutig
+ * @Updated: 2026/11/25 13:25:52 by Moutig
  *
  * What the units of src/suites/stdlib/ need around the function they
  * test:
@@ -21,8 +21,9 @@
  *     size fits);
  *   - sl_sizes: request sizes across the size classes of an allocator
  *     (every small size, then around each power of two up to 64 MiB);
- *   - sl_fill, sl_check: a byte pattern tied to the block and the offset,
- *     to see a block written by someone else or not written at all;
+ *   - sl_fill, sl_check, sl_checkPrefix: a byte pattern tied to the block
+ *     and the offset, to see a block written by someone else or not
+ *     written at all (sl_checkPrefix: the part a shrunk block keeps);
  *   - sl_disjoint: two allocations do not overlap.
  *
  * Only <stdlib.h> is under test. <stddef.h> (max_align_t, C11 on),
@@ -133,6 +134,20 @@ static inline int	sl_check(const void *p, size_t n, unsigned id)
 		if (b[i] != sl_byte(id, i))
 			return (0);
 	return (n == 0 || b[n - 1] == sl_byte(id, n - 1));
+}
+
+/*
+ * After sl_fill(p, filled, id), do the first @p n bytes (n <= filled,
+ * a shrunk block) still hold what sl_fill() wrote there?
+ */
+static inline int	sl_checkPrefix(const void *p, size_t n, size_t filled, unsigned id)
+{
+	const unsigned char	*b = p;
+
+	for (size_t i = 0; i < n; i += (i < 4096 ? 1 : 512))
+		if (b[i] != sl_byte(id, i))
+			return (0);
+	return (filled > n || filled == 0 || b[filled - 1] == sl_byte(id, filled - 1));
 }
 
 /* Do [a, a + n) and [b, b + m) not overlap? */

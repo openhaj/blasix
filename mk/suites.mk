@@ -117,6 +117,7 @@ stdlib_UNITS := \
 	memory/calloc \
 	memory/free \
 	memory/malloc \
+	memory/realloc \
 
 stdlib_HDRS := \
 	stdlib_cases.h \
