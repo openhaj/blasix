@@ -52,7 +52,8 @@
 #     K.3.1.1p4 reject probes are accepted.
 #   - realloc(p, 0) frees p and returns a null pointer without setting
 #     errno to EINVAL (XSH realloc() RETURN VALUE, POSIX.1-2024 [OB]):
-#     stdlib/realloc/zero_size_is_null_with_einval_or_a_new_object fails.
+#     stdlib/realloc/zero_size_is_null_with_einval_or_a_new_object fails;
+#     so does reallocarray(p, 0, n) with LAX=1 (zero_count_is_null_...).
 
 header stdlib.h
 

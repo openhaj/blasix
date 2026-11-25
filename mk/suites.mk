@@ -122,6 +122,7 @@ stdlib_UNITS := \
 	memory/malloc \
 	memory/posix_memalign \
 	memory/realloc \
+	memory/reallocarray \
 
 stdlib_HDRS := \
 	stdlib_cases.h \
