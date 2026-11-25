@@ -104,6 +104,7 @@ make compare A=host B=mylibc                 # what differs from the host libc
 | `LIBC_LDFLAGS` / `LIBC_LIBS` | link flags / libraries (after the objects) |
 | `LIBC_DEPS` | files whose change rebuilds the tests (e.g. `libc.a`) |
 | `LIBC_RUNTIME` | optional: the shared libraries the tests load at run time (`libc.so`); a change drops the result cache. Empty for a static libc |
+| `LIBC_ARCHIVE` | optional, a static libc: its archive (`libc.a`, in `LIBC_LIBS`). A change of the archive then relinks only the tests that use a changed member |
 | `libc-prepare` | recipe run before building (e.g. build the libc, or check it exists) |
 | `LIBC_LAX_CFLAGS` | optional, `LAX=1` only: macros that expose everything (e.g. `-D_DEFAULT_SOURCE`) |
 

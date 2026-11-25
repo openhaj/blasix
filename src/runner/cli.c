@@ -10,7 +10,7 @@
  * @file cli.c
  * @brief Command line of lcrun: usage and options.
  * @Created: 2026/11/24 08:25:17 by Moutig
- * @Updated: 2026/11/25 09:28:37 by Moutig
+ * @Updated: 2026/11/25 09:50:34 by Moutig
  *
  * Every option fills t_opts; the command (run, --spec-make, ...) is a
  * t_mode. --compare, --standards and --options are handled by main.c
@@ -47,6 +47,8 @@ static void	usage(void)
 "       lcrun --options                  list the option groups\n"
 "       lcrun --compare A.tsv B.tsv      compare two runs\n"
 "       lcrun --standards                list the known standards\n"
+"       lcrun --ar-index ARCHIVE         members of a static libc, hashed\n"
+"       lcrun --libc-key INDEX ARCHIVE MAP  key of one link (make)\n"
 "\n"
 "target:\n"
 "  -S STD      standard (see --standards)                 [posix-2024]\n"

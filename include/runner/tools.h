@@ -10,14 +10,15 @@
  * @file tools.h
  * @brief The spec tools of lcrun (tools/).
  * @Created: 2026/11/24 08:28:33 by Moutig
- * @Updated: 2026/11/24 08:29:22 by Moutig
+ * @Updated: 2026/11/25 09:50:13 by Moutig
  *
  * tools/make.c      --spec-make, the make fragment of a target;
  * tools/probes.c    --spec-probes, the probe sources;
  * tools/list.c      --spec-list, --options;
  * tools/check.c     --spec-check;
  * tools/matrix.c    --spec-matrix, --spec-todo;
- * tools/coverage.c  is an interface tested (shared by check and matrix).
+ * tools/coverage.c  is an interface tested (shared by check and matrix);
+ * tools/archive.c   --ar-index, --libc-key: the libc members a link uses.
  */
 
 #ifndef LCRUN_TOOLS_H
@@ -70,6 +71,27 @@ int			toolCheck(const t_run *r);
  * @return 0.
  */
 int			toolOptions(void);
+
+/**
+ * @brief --ar-index ARCHIVE: "<member>\t<hash>" per member of a static
+ *        archive, in archive order, the symbol table ("/") first.
+ *
+ * @param archive Path of the archive.
+ * @return 0, or 2 if it is not an ar archive (thin archives included).
+ */
+int			toolArIndex(const char *archive);
+
+/**
+ * @brief --libc-key INDEX ARCHIVE MAP: the key of one link, a hash of the
+ *        symbol table and of every member of ARCHIVE the linker map MAP
+ *        pulled; the hash of the whole index without MAP.
+ *
+ * @param indexPath Output of --ar-index.
+ * @param archive   Archive path, as written in the map.
+ * @param mapPath   Linker map (-Wl,-Map), may not exist.
+ * @return 0, or 2 if the index cannot be read.
+ */
+int			toolLibcKey(const char *indexPath, const char *archive, const char *mapPath);
 
 /**
  * @brief --spec-matrix: tested / required per header, in the 8 standards.

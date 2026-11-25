@@ -212,6 +212,16 @@ libc and target (`build/<libc>/<target>/`):
   `-MMD`), the framework or the library changes, or its command line
   (`<bin>.cmd`: compiler, flags, libraries; rewritten only when it
   differs). Adding a unit or editing a spec does not rebuild the others;
+- **with a static libc** (the profile sets `LIBC_ARCHIVE`, as hajlibc
+  does), "the library changes" means: a member of the archive the unit
+  pulled changed (its linker map, `<bin>.map`), or the archive's symbol
+  table did (a symbol added, removed or moved to another member). Each
+  link keeps a key of those members (`<bin>.libc`, `lcrun --libc-key`,
+  from `<target>/libc.index`, `lcrun --ar-index`), rewritten only when
+  it changes: editing one function of the libc relinks the units that
+  use it, not all. A unit that failed on an undefined symbol is retried
+  on any change of the archive; one that did not compile, only when its
+  headers change;
 - **a unit that did not build** leaves an empty, non-executable file
   next to its `.err`: it is not tried again until one of those inputs
   changes, and is still reported unavailable;
@@ -273,8 +283,10 @@ For every required interface, a tiny program is generated
 | `accepted` / `rejected` | reject probe: a translation unit the standard requires the implementation to refuse compiled / was refused |
 
 A probe runs again only when its source, a header it includes or its
-flags change; a declaration probe, which is also linked, also when the
-library changes. The sources are regenerated in a new directory and
+flags change; a declaration probe of a function or a variable, which is
+also linked, also when the library changes (with `LIBC_ARCHIVE`: the
+members it pulls, as for a unit; `undeclared` does not depend on the
+library at all). The sources are regenerated in a new directory and
 copied over only where they differ (`scripts/sync-tree.sh`), so editing
 one spec file reruns the probes of that header only.
 

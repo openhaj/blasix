@@ -10,7 +10,7 @@
  * @file main.c
  * @brief lcrun: entry point, one command per invocation.
  * @Created: 2026/11/24 08:25:41 by Moutig
- * @Updated: 2026/11/25 09:28:44 by Moutig
+ * @Updated: 2026/11/25 09:50:42 by Moutig
  *
  * Parses the command line (cli.c), loads the spec database (spec/), then
  * runs the command: a spec tool (tools/), or a run: discover the units
@@ -50,6 +50,10 @@ int	main(int argc, char **argv)
 
 	if (argc == 4 && !strcmp(argv[1], "--compare"))
 		return (compareTsv(argv[2], argv[3], isatty(1)));
+	if (argc == 3 && !strcmp(argv[1], "--ar-index"))
+		return (toolArIndex(argv[2]));
+	if (argc == 5 && !strcmp(argv[1], "--libc-key"))
+		return (toolLibcKey(argv[2], argv[3], argv[4]));
 	if (argc == 2 && !strcmp(argv[1], "--standards"))
 		return (stdPrintAll(stdout), 0);
 	if (argc == 2 && !strcmp(argv[1], "--options"))

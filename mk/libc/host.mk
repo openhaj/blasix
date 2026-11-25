@@ -8,6 +8,9 @@
 #   LIBC_LDFLAGS     link flags
 #   LIBC_LIBS        libraries, after the objects
 #   LIBC_DEPS        files the test binaries depend on (rebuild trigger)
+#   LIBC_ARCHIVE     (optional) a static libc: its archive, also in LIBC_LIBS.
+#                    A new archive then relinks only the units and probes
+#                    that pull a changed member (mk/tests.mk)
 #   LIBC_RUNTIME     (optional) the shared libraries the binaries load at
 #                    run time: if one changes, the result cache is dropped
 #                    (a static libc is in the binaries: leave it empty)

@@ -19,6 +19,7 @@ RUNNER_SRCS		:= \
 	spec/require.c \
 	spec/standards.c \
 	spec/visibility.c \
+	tools/archive.c \
 	tools/check.c \
 	tools/coverage.c \
 	tools/list.c \
