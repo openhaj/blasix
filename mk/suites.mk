@@ -16,6 +16,7 @@
 CATEGORIES := \
 	ctype \
 	inttypes \
+	malloc \
 	stdlib \
 	string \
 	strings \
@@ -122,7 +123,9 @@ stdlib_UNITS := \
 	memory/malloc \
 	memory/posix_memalign \
 	memory/realloc \
+	memory/reallocarr \
 	memory/reallocarray \
+	memory/reallocf \
 
 stdlib_HDRS := \
 	stdlib_cases.h \
@@ -204,3 +207,17 @@ strings_UNITS := \
 
 strings_HDRS := \
 	strings_cases.h \
+
+# ----- malloc -----
+
+malloc_UNITS := \
+	aligned/memalign \
+	aligned/pvalloc \
+	aligned/valloc \
+	legacy/cfree \
+	query/malloc_good_size \
+	query/malloc_size \
+	query/malloc_usable_size \
+
+malloc_HDRS := \
+	malloc_cases.h \

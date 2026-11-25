@@ -194,6 +194,14 @@ fcvt                        POSIX.1-2001   XSI ob=POSIX.1-2001 removed=POSIX.1-2
 gcvt                        POSIX.1-2001   XSI ob=POSIX.1-2001 removed=POSIX.1-2008
 mktemp                      POSIX.1-2001   XSI ob=POSIX.1-2001 removed=POSIX.1-2008
 
+# ----- Extensions (EXT=1): in no standard -----
+# FreeBSD malloc(3): realloc() that frees ptr when it fails; NetBSD
+# reallocarr(3): resizes *ptrp to number * size, 0 or an error number,
+# *ptrp unchanged on failure. Not reserved for <stdlib.h>: hidden without
+# EXT=1.
+reallocf                    EXT            ext=BSD
+reallocarr                  EXT            ext=BSD
+
 # ----- POSIX: as described in <sys/wait.h> (XSI in 2001, CX from 2008) -----
 WNOHANG                     POSIX.1-2001   macro XSI base=POSIX.1-2008 same=sys/wait.h
 WUNTRACED                   POSIX.1-2001   macro XSI base=POSIX.1-2008 same=sys/wait.h
