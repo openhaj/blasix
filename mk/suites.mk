@@ -114,6 +114,11 @@ inttypes_HDRS := \
 
 stdlib_UNITS := \
 	defs \
+	memory/free \
+	memory/malloc \
+
+stdlib_HDRS := \
+	stdlib_cases.h \
 
 # ----- string -----
 
