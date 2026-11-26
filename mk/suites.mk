@@ -16,15 +16,19 @@
 CATEGORIES := \
 	ctype \
 	inttypes \
+	malloc \
+	stdlib \
 	string \
 	strings \
 
 # ----- bits (shared by several headers) -----
 
 BITS_HDRS := \
+	annex_k/constraint_handler_t.h \
 	annex_k/errno_t.h \
 	annex_k/lib_ext1.h \
 	annex_k/rsize_t.h \
+	fcntl/open_flags.h \
 	inttypes/convert.h \
 	inttypes/format.h \
 	inttypes/imaxdiv_t.h \
@@ -38,8 +42,20 @@ BITS_HDRS := \
 	stddef/wchar_t.h \
 	stdint/intmax_t.h \
 	stdint/uintmax_t.h \
+	stdlib/EXIT_FAILURE.h \
+	stdlib/EXIT_SUCCESS.h \
+	stdlib/MB_CUR_MAX.h \
+	stdlib/RAND_MAX.h \
+	stdlib/div_t.h \
+	stdlib/ldiv_t.h \
+	stdlib/lldiv_t.h \
+	threads/ONCE_FLAG_INIT.h \
+	threads/once_flag.h \
 	version/__STDC_VERSION_INTTYPES_H__.h \
+	version/__STDC_VERSION_STDLIB_H__.h \
 	version/__STDC_VERSION_STRING_H__.h \
+	wait/options.h \
+	wait/status.h \
 
 # ----- ctype -----
 
@@ -94,6 +110,26 @@ inttypes_UNITS := \
 
 inttypes_HDRS := \
 	inttypes_cases.h \
+
+# ----- stdlib -----
+
+stdlib_UNITS := \
+	defs \
+	memory/aligned_alloc \
+	memory/calloc \
+	memory/free \
+	memory/free_aligned_sized \
+	memory/free_sized \
+	memory/malloc \
+	memory/posix_memalign \
+	memory/realloc \
+	memory/reallocarr \
+	memory/reallocarray \
+	memory/reallocf \
+
+stdlib_HDRS := \
+	stdlib_cases.h \
+	stdlib_procs.h \
 
 # ----- string -----
 
@@ -175,3 +211,17 @@ strings_UNITS := \
 
 strings_HDRS := \
 	strings_cases.h \
+
+# ----- malloc -----
+
+malloc_UNITS := \
+	aligned/memalign \
+	aligned/pvalloc \
+	aligned/valloc \
+	legacy/cfree \
+	query/malloc_good_size \
+	query/malloc_size \
+	query/malloc_usable_size \
+
+malloc_HDRS := \
+	malloc_cases.h \
