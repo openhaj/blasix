@@ -20,7 +20,9 @@
 #                    a strict target hides is still tested
 #   LIBC_COV_SUPPORTED / LIBC_COV_PREPARE / LIBC_COV_REPORT (optional):
 #                    coverage support, see mk/libc/hajlibc.mk; with COV=1
-#                    libc-prepare builds the instrumented libc
+#                    libc-prepare builds the instrumented libc;
+#                    LIBC_COV_MAKEFLAGS: variables for the COV=1 run (CC=...),
+#                    LIBC_COV_WHY: why coverage is not supported
 
 LIBC_CC			:= $(HOST_CC)
 LIBC_CPPFLAGS	:=

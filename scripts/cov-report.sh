@@ -32,8 +32,11 @@ real=${5:-$root}
 here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$out"
 
-command -v gcov >/dev/null || { echo "coverage: gcov not found" >&2; exit 1; }
-command -v gcov-tool >/dev/null || { echo "coverage: gcov-tool not found" >&2; exit 1; }
+# GCOV / GCOV_TOOL: the versions matching the compiler (default gcov, gcov-tool).
+gcov=${GCOV:-gcov}
+gcov_tool=${GCOV_TOOL:-gcov-tool}
+command -v "$gcov" >/dev/null || { echo "coverage: $gcov not found" >&2; exit 1; }
+command -v "$gcov_tool" >/dev/null || { echo "coverage: $gcov_tool not found" >&2; exit 1; }
 
 find "$obj" -name '*.gcno' | sort > "$out/gcno.list"
 if [ ! -s "$out/gcno.list" ]; then
@@ -51,7 +54,7 @@ if [ -d "$1" ]; then
 	cp -r "$1" "$acc"
 	shift
 	for d in "$@"; do
-		gcov-tool merge -o "$acc.tmp" "$acc" "$d" >/dev/null 2>&1 \
+		"$gcov_tool" merge -o "$acc.tmp" "$acc" "$d" >/dev/null 2>&1 \
 			&& { rm -rf "$acc"; mv "$acc.tmp" "$acc"; } \
 			|| rm -rf "$acc.tmp"
 	done
@@ -64,7 +67,7 @@ fi
 
 # ----- every object, with or without a .gcda -----
 echo "  COV      $(wc -l < "$out/gcno.list") objects, $(find "$obj" -name '*.gcda' | wc -l) run"
-(cd "$root" && xargs gcov -t -b -c < "$out/gcno.list" 2>/dev/null) \
+(cd "$root" && xargs "$gcov" -t -b -c < "$out/gcno.list" 2>/dev/null) \
 	| awk -v root="$root" -v real="$real" -v tsv="$out/lines.tsv" \
 		-f "$here/gcov2lcov.awk" > "$out/lcov.info"
 

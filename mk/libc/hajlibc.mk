@@ -18,10 +18,18 @@ include $(HAJLIBC)/mk/hajlib.mk
 # compiler's LTO objects (gcc-ar for GCC, llvm-ar for clang): an index
 # written with the wrong LTO plugin is empty and nothing would link.
 _LC_IS_CLANG	:= $(shell $(CC) --version 2>/dev/null | grep -qi clang && echo 1)
+# Clang: llvm-ar, else llvm-ar-NN (Debian/Ubuntu name it after the
+# version), else ar with LLVMgold.so, as hajlibc does (mk/cross.mk).
 ifeq ($(_LC_IS_CLANG),1)
-LC_AR			:= $(or $(shell command -v llvm-ar 2>/dev/null),ar)
+_LC_CLANG_VER	:= $(shell $(CC) -dumpversion 2>/dev/null | cut -d. -f1)
+_LC_LLVM_GOLD	:= $(shell p=$$($(CC) -print-file-name=LLVMgold.so 2>/dev/null); \
+	[ -f "$$p" ] && echo "$$p")
+LC_AR			:= $(or $(shell command -v llvm-ar 2>/dev/null),$(shell command -v llvm-ar-$(_LC_CLANG_VER) 2>/dev/null),ar$(if $(_LC_LLVM_GOLD), --plugin $(_LC_LLVM_GOLD)))
+LC_NM			:= $(or $(shell command -v llvm-nm 2>/dev/null),$(shell command -v llvm-nm-$(_LC_CLANG_VER) 2>/dev/null),nm$(if $(_LC_LLVM_GOLD), --plugin $(_LC_LLVM_GOLD)))
 else
-LC_AR			:= $(or $(shell command -v gcc-ar 2>/dev/null),ar)
+# gcc-NN-ar matches gcc-NN's LTO plugin; plain gcc-ar may be another version.
+LC_AR			:= $(or $(shell command -v $(subst gcc,gcc-ar,$(notdir $(CC))) 2>/dev/null),$(shell command -v gcc-ar 2>/dev/null),ar)
+LC_NM			:= $(or $(shell command -v $(subst gcc,gcc-nm,$(notdir $(CC))) 2>/dev/null),$(shell command -v gcc-nm 2>/dev/null),nm)
 endif
 
 # The coverage build (COV=1) is a copy of hajlibc's sources, built with
@@ -35,7 +43,6 @@ LC_LIBC_BUILT	:= $(LC_COV_TREE)/libhajc.a
 else
 LC_LIBC_BUILT	:= $(HAJ_LIB)
 endif
-LC_NM			:= $(if $(filter llvm-ar,$(notdir $(LC_AR))),llvm-nm,$(or $(shell command -v gcc-nm 2>/dev/null),nm))
 
 # Static: a new archive relinks only what pulls a changed member (tests.mk).
 LIBC_ARCHIVE	:= $(OUT)/libhajc.a
@@ -77,7 +84,28 @@ $(LIBC_ARCHIVE): $(LC_LIBC_BUILT)
 # cov.c for the details. The report covers every file compiled into the
 # library (scripts/cov-report.sh), under the names of the original sources.
 
-LIBC_COV_SUPPORTED	:= 1
+#
+# -fprofile-info-section and __gcov_info_to_gcda need GCC 12 or later:
+# clang and older GCCs have neither. The whole coverage build (libc,
+# framework, tests) uses LC_COV_CC: CC itself when it is GCC >= 12,
+# otherwise the newest gcc-NN >= 12 installed; COV_CC=... chooses it.
+# gcov and gcov-tool must match its version (gcov-NN when they exist).
+lc_gcc_ok		= $(shell v=$$($(1) -dumpversion 2>/dev/null) && \
+	! $(1) --version 2>/dev/null | grep -qi clang && \
+	[ "$${v%%.*}" -ge 12 ] 2>/dev/null && echo 1)
+ifdef COV_CC
+LC_COV_CC		:= $(if $(call lc_gcc_ok,$(COV_CC)),$(COV_CC))
+else
+LC_COV_CC		:= $(if $(call lc_gcc_ok,$(CC)),$(CC),$(firstword \
+	$(foreach v,16 15 14 13 12,$(if $(call lc_gcc_ok,gcc-$(v)),gcc-$(v)))))
+endif
+LC_COV_VER		:= $(if $(LC_COV_CC),$(shell $(LC_COV_CC) -dumpversion | cut -d. -f1))
+LC_COV_GCOV		:= $(or $(shell command -v gcov-$(LC_COV_VER) 2>/dev/null),gcov)
+LC_COV_GCOV_TOOL	:= $(or $(shell command -v gcov-tool-$(LC_COV_VER) 2>/dev/null),gcov-tool)
+
+LIBC_COV_SUPPORTED	:= $(if $(LC_COV_CC),1,0)
+LIBC_COV_WHY		:= needs GCC >= 12, CC=$(CC) is not: set COV_CC=gcc-NN
+LIBC_COV_MAKEFLAGS	:= CC=$(LC_COV_CC)
 LC_COV_LIBC_CFLAGS	:= -fprofile-arcs -ftest-coverage \
 	-fprofile-info-section=gcov_info -O0 -g -fno-lto
 ifeq ($(COV),1)
@@ -87,6 +115,7 @@ endif
 
 LIBC_COV_PREPARE	= true
 LIBC_COV_REPORT		= \
+	GCOV=$(LC_COV_GCOV) GCOV_TOOL=$(LC_COV_GCOV_TOOL) \
 	scripts/cov-report.sh $(LC_COV_TREE) $(LC_COV_TREE)/objs \
 		$(abspath $(OUT))/cov $(abspath $(OUT))/coverage $(HAJLIBC); \
 	rm -rf $(OUT)/bin $(OUT)/fw $(LIBC_ARCHIVE)
