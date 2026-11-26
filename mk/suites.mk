@@ -140,10 +140,14 @@ string_UNITS := \
 	misc/strsignal \
 	search/memchr \
 	search/memmem \
+	search/memrchr \
+	search/strcasestr \
 	search/strchr \
+	search/strchrnul \
 	search/strcspn \
 	search/strpbrk \
 	search/strrchr \
+	search/strsep \
 	search/strspn \
 	search/strstr \
 	search/strtok \

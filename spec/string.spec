@@ -88,6 +88,14 @@ memmem                      POSIX.1-2024
 strlcat                     POSIX.1-2024
 strlcpy                     POSIX.1-2024
 
+# Extensions (EXT=1): in no standard; the reference is the glibc manual
+# and the BSD man pages. Their names are reserved (str[a-z]*, mem[a-z]*),
+# so a header may declare them in any mode.
+memrchr                     EXT            ext=GNU
+strcasestr                  EXT            ext=GNU
+strchrnul                   EXT            ext=GNU
+strsep                      EXT            ext=BSD
+
 # Annex K (K.3.7): errno_t is int (also in <errno.h>), rsize_t is
 # size_t (also in <stddef.h>).
 errno_t                     C11            type LIB_EXT1 same=errno.h
