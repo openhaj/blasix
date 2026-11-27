@@ -127,6 +127,7 @@ stdlib_UNITS := \
 	env/setenv \
 	env/unsetenv \
 	exit/_Exit \
+	exit/abort \
 	exit/atexit \
 	exit/exit \
 	memory/aligned_alloc \

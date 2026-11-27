@@ -10,7 +10,7 @@
  * @file sys.c
  * @brief Raw Linux syscalls for the framework.
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/27 13:37:50 by Moutig
+ * @Updated: 2026/11/27 14:03:47 by Moutig
  *
  * Every system call of the framework goes through lc_syscall3 /
  * lc_syscall6, a few lines of inline asm per architecture, so that the
@@ -69,6 +69,7 @@
 # define LC_NR_CHDIR		80
 # define LC_NR_GETCWD		79
 # define LC_NR_GETEUID		107
+# define LC_NR_RT_SIGPROCMASK	14
 
 /*
  * Signal return trampoline. The x86_64 kernel refuses to deliver a
@@ -179,6 +180,7 @@ static long	lc_syscall6(long nr, long a, long b, long c, long d, long e, long f)
 # define LC_NR_CHDIR		49
 # define LC_NR_GETCWD		17
 # define LC_NR_GETEUID		175
+# define LC_NR_RT_SIGPROCMASK	135
 
 /* aarch64 returns through the vDSO trampoline: no SA_RESTORER needed. */
 # define LC_SA_RESTORER		0UL
@@ -387,6 +389,17 @@ long	lc_sysSigaction(int sig, void (*handler)(int), unsigned long flags)
 	act.mask = 0;
 	return (lc_syscall6(LC_NR_RT_SIGACTION, sig, (long)&act, 0,
 			(long)sizeof(act.mask), 0, 0));
+}
+
+/** rt_sigprocmask how: add the set to the blocked signals. */
+#define LC_SIG_BLOCK	0
+
+long	lc_sysBlockSignal(int sig)
+{
+	unsigned long	set = 1UL << (sig - 1);
+
+	return (lc_syscall6(LC_NR_RT_SIGPROCMASK, LC_SIG_BLOCK, (long)&set, 0,
+			(long)sizeof(set), 0, 0));
 }
 
 long	lc_sysRead(int fd, void *buf, unsigned long n)

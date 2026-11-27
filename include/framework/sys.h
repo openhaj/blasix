@@ -10,7 +10,7 @@
  * @file sys.h
  * @brief Raw Linux syscalls used by the framework (x86_64, aarch64).
  * @Created: 2026/11/23 04:18:40 by Moutig
- * @Updated: 2026/11/27 13:37:20 by Moutig
+ * @Updated: 2026/11/27 14:03:07 by Moutig
  *
  * The framework must not depend on the libc under test: these are the
  * only "system" functions it uses. They return what the kernel returns
@@ -200,6 +200,14 @@ long	lc_sysTgkill(long tgid, long tid, int sig);
 long	lc_sysSigaction(int sig, void (*handler)(int), unsigned long flags);
 
 /**
+ * @brief rt_sigprocmask(SIG_BLOCK): add one signal to the blocked ones.
+ *
+ * @param sig Signal number (1 ... 64).
+ * @return 0, or -errno.
+ */
+long	lc_sysBlockSignal(int sig);
+
+/**
  * @brief read(2).
  *
  * @param fd  File descriptor.
@@ -365,6 +373,13 @@ long	lc_sysClockNanosleep(int clk, int flags, const struct lc_timespec *req,
 
 /** Signal numbers (same on x86_64 and aarch64). */
 # define LC_SIGKILL		9
+
+/** SIGABRT (6 on x86_64 and aarch64). */
+# define LC_SIGABRT		6
+
+/** Signal dispositions of sigaction: default, ignore. */
+# define LC_SIG_DFL		((void (*)(int))0)
+# define LC_SIG_IGN		((void (*)(int))1)
 
 /** sigaction flag: back to SIG_DFL when the handler is entered. */
 # define LC_SA_RESETHAND	0x80000000UL
