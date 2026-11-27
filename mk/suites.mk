@@ -114,6 +114,9 @@ inttypes_HDRS := \
 # ----- stdlib -----
 
 stdlib_UNITS := \
+	convert/atoi \
+	convert/atol \
+	convert/atoll \
 	convert/strtol \
 	convert/strtoll \
 	convert/strtoul \
@@ -132,6 +135,7 @@ stdlib_UNITS := \
 	memory/reallocf \
 
 stdlib_HDRS := \
+	ato_int.h \
 	stdlib_cases.h \
 	stdlib_procs.h \
 	strto_int.h \
