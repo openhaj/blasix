@@ -28,8 +28,12 @@ LC_AR			:= $(or $(shell command -v llvm-ar 2>/dev/null),$(shell command -v llvm-
 LC_NM			:= $(or $(shell command -v llvm-nm 2>/dev/null),$(shell command -v llvm-nm-$(_LC_CLANG_VER) 2>/dev/null),nm$(if $(_LC_LLVM_GOLD), --plugin $(_LC_LLVM_GOLD)))
 else
 # gcc-NN-ar matches gcc-NN's LTO plugin; plain gcc-ar may be another version.
-LC_AR			:= $(or $(shell command -v $(subst gcc,gcc-ar,$(notdir $(CC))) 2>/dev/null),$(shell command -v gcc-ar 2>/dev/null),ar)
-LC_NM			:= $(or $(shell command -v $(subst gcc,gcc-nm,$(notdir $(CC))) 2>/dev/null),$(shell command -v gcc-nm 2>/dev/null),nm)
+# Only a name with "gcc" in it gives one: for CC=cc the substitution would
+# leave "cc", found by command -v, and the archive would not be indexed.
+_LC_CC_NAME		:= $(notdir $(CC))
+_LC_GCC_TOOL	= $(if $(findstring gcc,$(_LC_CC_NAME)),$(shell command -v $(subst gcc,gcc-$(1),$(_LC_CC_NAME)) 2>/dev/null))
+LC_AR			:= $(or $(call _LC_GCC_TOOL,ar),$(shell command -v gcc-ar 2>/dev/null),ar)
+LC_NM			:= $(or $(call _LC_GCC_TOOL,nm),$(shell command -v gcc-nm 2>/dev/null),nm)
 endif
 
 # The coverage build (COV=1) is a copy of hajlibc's sources, built with
@@ -72,7 +76,12 @@ libc-prepare:
 	@$(MAKE) --no-print-directory -s -C $(HAJLIBC) >/dev/null
 endif
 
-$(LIBC_ARCHIVE): $(LC_LIBC_BUILT)
+# Copied again when the archiver changes too (its .cmd file): a copy
+# indexed by the wrong one links nothing.
+$(LIBC_ARCHIVE).cmd: FORCE
+	$(call lc_write_cmd,$@,$(LC_AR))
+
+$(LIBC_ARCHIVE): $(LC_LIBC_BUILT) $(LIBC_ARCHIVE).cmd
 	@mkdir -p $(@D)
 	@cp $< $@
 	@$(LC_AR) s $@

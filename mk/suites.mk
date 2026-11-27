@@ -114,6 +114,10 @@ inttypes_HDRS := \
 # ----- stdlib -----
 
 stdlib_UNITS := \
+	convert/strtol \
+	convert/strtoll \
+	convert/strtoul \
+	convert/strtoull \
 	defs \
 	memory/aligned_alloc \
 	memory/calloc \
@@ -130,6 +134,7 @@ stdlib_UNITS := \
 stdlib_HDRS := \
 	stdlib_cases.h \
 	stdlib_procs.h \
+	strto_int.h \
 
 # ----- string -----
 
