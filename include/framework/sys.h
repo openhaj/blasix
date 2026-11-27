@@ -10,7 +10,7 @@
  * @file sys.h
  * @brief Raw Linux syscalls used by the framework (x86_64, aarch64).
  * @Created: 2026/11/23 04:18:40 by Moutig
- * @Updated: 2026/11/25 08:40:54 by Moutig
+ * @Updated: 2026/11/27 13:37:20 by Moutig
  *
  * The framework must not depend on the libc under test: these are the
  * only "system" functions it uses. They return what the kernel returns
@@ -118,6 +118,56 @@ long	lc_sysMprotect(void *addr, unsigned long len, int prot);
  * @return 0, or -errno.
  */
 long	lc_sysUnlink(const char *path);
+
+/**
+ * @brief rmdir(2), through unlinkat(AT_FDCWD, ..., AT_REMOVEDIR).
+ *
+ * @param path Path of the (empty) directory.
+ * @return 0, or -errno.
+ */
+long	lc_sysRmdir(const char *path);
+
+/**
+ * @brief symlink(2), through symlinkat(target, AT_FDCWD, path).
+ *
+ * @param target What the link contains (not checked).
+ * @param path   Path of the link to create.
+ * @return 0, or -errno.
+ */
+long	lc_sysSymlink(const char *target, const char *path);
+
+/**
+ * @brief chmod(2), through fchmodat(AT_FDCWD, ...).
+ *
+ * @param path Path of the file.
+ * @param mode Permission bits.
+ * @return 0, or -errno.
+ */
+long	lc_sysChmod(const char *path, int mode);
+
+/**
+ * @brief chdir(2).
+ *
+ * @param path New current directory.
+ * @return 0, or -errno.
+ */
+long	lc_sysChdir(const char *path);
+
+/**
+ * @brief getcwd(2): the current directory, as the kernel resolves it.
+ *
+ * @param buf  Destination.
+ * @param size Size of @p buf.
+ * @return Length stored, terminating NUL included, or -errno.
+ */
+long	lc_sysGetcwd(char *buf, unsigned long size);
+
+/**
+ * @brief geteuid(2).
+ *
+ * @return Effective user id.
+ */
+long	lc_sysGeteuid(void);
 
 /**
  * @brief gettid(2).

@@ -137,6 +137,7 @@ stdlib_UNITS := \
 	memory/reallocarr \
 	memory/reallocarray \
 	memory/reallocf \
+	path/realpath \
 	search/qsort \
 
 stdlib_HDRS := \
