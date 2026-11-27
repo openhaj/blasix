@@ -47,6 +47,7 @@ FW_COV_SRC		:= \
 	cov.c \
 
 FW_HDRS			:= \
+	env.h \
 	lc.h \
 	sys.h \
 

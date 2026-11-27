@@ -122,6 +122,7 @@ stdlib_UNITS := \
 	convert/strtoul \
 	convert/strtoull \
 	defs \
+	env/getenv \
 	memory/aligned_alloc \
 	memory/calloc \
 	memory/free \
