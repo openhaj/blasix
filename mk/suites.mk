@@ -133,6 +133,7 @@ stdlib_UNITS := \
 	memory/reallocarr \
 	memory/reallocarray \
 	memory/reallocf \
+	search/qsort \
 
 stdlib_HDRS := \
 	ato_int.h \
