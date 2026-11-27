@@ -28,8 +28,18 @@ LC_AR			:= $(or $(shell command -v llvm-ar 2>/dev/null),$(shell command -v llvm-
 LC_NM			:= $(or $(shell command -v llvm-nm 2>/dev/null),$(shell command -v llvm-nm-$(_LC_CLANG_VER) 2>/dev/null),nm$(if $(_LC_LLVM_GOLD), --plugin $(_LC_LLVM_GOLD)))
 else
 # gcc-NN-ar matches gcc-NN's LTO plugin; plain gcc-ar may be another version.
-LC_AR			:= $(or $(shell command -v $(subst gcc,gcc-ar,$(notdir $(CC))) 2>/dev/null),$(shell command -v gcc-ar 2>/dev/null),ar)
-LC_NM			:= $(or $(shell command -v $(subst gcc,gcc-nm,$(notdir $(CC))) 2>/dev/null),$(shell command -v gcc-nm 2>/dev/null),nm)
+# Named after CC only when CC's name says gcc (gcc-14 -> gcc-ar-14,
+# x86_64-linux-gnu-gcc -> x86_64-linux-gnu-gcc-ar): for CC=cc the
+# substitution would give cc itself. Then gcc-ar-NN after CC's version
+# (cc -> gcc-12 on Debian), then gcc-ar, then ar.
+_LC_CC_NAME		:= $(notdir $(firstword $(CC)))
+_LC_GCC_VER		:= $(shell $(CC) -dumpversion 2>/dev/null | cut -d. -f1)
+lc_gcc_tool		= $(or \
+	$(if $(findstring gcc,$(_LC_CC_NAME)),$(shell command -v $(subst gcc,gcc-$(1),$(_LC_CC_NAME)) 2>/dev/null)), \
+	$(if $(_LC_GCC_VER),$(shell command -v gcc-$(1)-$(_LC_GCC_VER) 2>/dev/null)), \
+	$(shell command -v gcc-$(1) 2>/dev/null),$(1))
+LC_AR			:= $(strip $(call lc_gcc_tool,ar))
+LC_NM			:= $(strip $(call lc_gcc_tool,nm))
 endif
 
 # The coverage build (COV=1) is a copy of hajlibc's sources, built with
