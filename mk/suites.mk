@@ -123,6 +123,9 @@ stdlib_UNITS := \
 	convert/strtoull \
 	defs \
 	env/getenv \
+	env/putenv \
+	env/setenv \
+	env/unsetenv \
 	memory/aligned_alloc \
 	memory/calloc \
 	memory/free \
@@ -138,6 +141,7 @@ stdlib_UNITS := \
 
 stdlib_HDRS := \
 	ato_int.h \
+	env_cases.h \
 	stdlib_cases.h \
 	stdlib_procs.h \
 	strto_int.h \
