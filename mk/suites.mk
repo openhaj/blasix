@@ -126,6 +126,9 @@ stdlib_UNITS := \
 	env/putenv \
 	env/setenv \
 	env/unsetenv \
+	exit/_Exit \
+	exit/atexit \
+	exit/exit \
 	memory/aligned_alloc \
 	memory/calloc \
 	memory/free \
@@ -143,6 +146,7 @@ stdlib_UNITS := \
 stdlib_HDRS := \
 	ato_int.h \
 	env_cases.h \
+	exit_cases.h \
 	stdlib_cases.h \
 	stdlib_procs.h \
 	strto_int.h \
