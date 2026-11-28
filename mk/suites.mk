@@ -179,6 +179,9 @@ pthread_UNITS := \
 	attr/pthread_attr_setstackaddr \
 	attr/pthread_attr_setstacksize \
 	defs \
+	sched/pthread_getschedparam \
+	sched/pthread_setschedparam \
+	sched/pthread_setschedprio \
 	thread/pthread_create \
 	thread/pthread_detach \
 	thread/pthread_equal \
