@@ -248,9 +248,14 @@ malloc_HDRS := \
 
 unistd_UNITS := \
 	defs \
+	fd/dup2 \
+	fd/pipe \
 	io/close \
+	io/lseek \
 	io/read \
 	io/write \
+	process/_exit \
+	process/fork \
 
 unistd_HDRS := \
 	unistd_cases.h \
