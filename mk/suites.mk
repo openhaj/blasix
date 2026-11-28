@@ -179,6 +179,18 @@ pthread_UNITS := \
 	attr/pthread_attr_setstackaddr \
 	attr/pthread_attr_setstacksize \
 	defs \
+	mutexattr/pthread_mutexattr_destroy \
+	mutexattr/pthread_mutexattr_getprioceiling \
+	mutexattr/pthread_mutexattr_getprotocol \
+	mutexattr/pthread_mutexattr_getpshared \
+	mutexattr/pthread_mutexattr_getrobust \
+	mutexattr/pthread_mutexattr_gettype \
+	mutexattr/pthread_mutexattr_init \
+	mutexattr/pthread_mutexattr_setprioceiling \
+	mutexattr/pthread_mutexattr_setprotocol \
+	mutexattr/pthread_mutexattr_setpshared \
+	mutexattr/pthread_mutexattr_setrobust \
+	mutexattr/pthread_mutexattr_settype \
 	sched/pthread_getschedparam \
 	sched/pthread_setschedparam \
 	sched/pthread_setschedprio \

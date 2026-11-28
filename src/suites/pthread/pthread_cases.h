@@ -10,7 +10,7 @@
  * @file pthread_cases.h
  * @brief Shared helpers of the <pthread.h> units.
  * @Created: 2026/11/28 17:45:51 by Moutig
- * @Updated: 2026/11/28 18:03:13 by Moutig
+ * @Updated: 2026/11/28 18:28:57 by Moutig
  *
  * The threads of a case talk through plain int flags, read and written
  * with the compiler's atomic builtins (no libc, no data race):
@@ -30,7 +30,13 @@
  *     sysconf() when the header leaves it out) and {PAGESIZE};
  *   - pt_runWith: create a thread with an attributes object, wait until
  *     it has run (a flag, so that it also works for a detached thread)
- *     and join it when it is joinable.
+ *     and join it when it is joinable;
+ *   - pt_mutexOfType: initialize a mutex of a given type;
+ *   - pt_holdStart, pt_holdEnd: another thread locks a mutex and keeps it
+ *     until told to unlock it; pt_tryOther: pthread_mutex_trylock() from
+ *     another thread (unlocked again when it succeeds);
+ *   - pt_absReal, pt_absMono: an absolute time n nanoseconds from now on
+ *     CLOCK_REALTIME or CLOCK_MONOTONIC, for the timed functions.
  *
  * The time and the waits are raw syscalls (lc_now, lc_sleep).
  */
@@ -42,6 +48,7 @@
 # include "framework/sys.h"
 # include <limits.h>
 # include <pthread.h>
+# include <time.h>
 # include <unistd.h>
 
 /** Longest wait for another thread (a working libc takes microseconds). */
@@ -173,6 +180,119 @@ static inline int	pt_runWith(const pthread_attr_t *attr, int join, pt_run *r)
 	if (join && pthread_join(t, NULL) != 0)
 		return (-1);
 	return (0);
+}
+
+/* Initialize *m as a mutex of type @p type. @return 0, or an error number. */
+static inline int	pt_mutexOfType(pthread_mutex_t *m, int type)
+{
+	pthread_mutexattr_t	a;
+	int					e;
+
+	e = pthread_mutexattr_init(&a);
+	if (e != 0)
+		return (e);
+	e = pthread_mutexattr_settype(&a, type);
+	if (e == 0)
+		e = pthread_mutex_init(m, &a);
+	(void)pthread_mutexattr_destroy(&a);
+	return (e);
+}
+
+/* Another thread that owns a mutex until pt_holdEnd. */
+typedef struct pt_hold
+{
+	pthread_mutex_t	*m;
+	pthread_t		t;
+	int				held;		/* Set once the lock call has returned. */
+	int				release;	/* Set by pt_holdEnd. */
+	int				ret;		/* What pthread_mutex_lock() returned. */
+}	pt_hold;
+
+static inline void	*pt_holdBody(void *arg)
+{
+	pt_hold	*h = arg;
+
+	h->ret = pthread_mutex_lock(h->m);
+	pt_set(&h->held, 1);
+	(void)pt_waitFor(&h->release, 1);
+	if (h->ret == 0)
+		(void)pthread_mutex_unlock(h->m);
+	return (NULL);
+}
+
+/*
+ * Start a thread that locks *m and keeps it.
+ *
+ * @return 0 once it owns the mutex, its lock error, or -1.
+ */
+static inline int	pt_holdStart(pt_hold *h, pthread_mutex_t *m)
+{
+	lc_fill(h, 0, sizeof(*h));
+	h->m = m;
+	if (pthread_create(&h->t, NULL, pt_holdBody, h) != 0)
+		return (-1);
+	if (!pt_waitFor(&h->held, 1))
+		return (-1);
+	return (h->ret);
+}
+
+/* Let the holder unlock and end; join it. */
+static inline void	pt_holdEnd(pt_hold *h)
+{
+	pt_set(&h->release, 1);
+	(void)pthread_join(h->t, NULL);
+}
+
+/* What pt_tryOther hands its thread. */
+typedef struct pt_try
+{
+	pthread_mutex_t	*m;
+	int				e;
+}	pt_try;
+
+static inline void	*pt_tryBody(void *arg)
+{
+	pt_try	*a = arg;
+
+	a->e = pthread_mutex_trylock(a->m);
+	if (a->e == 0)
+		(void)pthread_mutex_unlock(a->m);
+	return (NULL);
+}
+
+/* @return What pthread_mutex_trylock(m) gives in another thread, or -1. */
+static inline int	pt_tryOther(pthread_mutex_t *m)
+{
+	pt_try		a;
+	pthread_t	t;
+
+	a.m = m;
+	a.e = -1;
+	if (pthread_create(&t, NULL, pt_tryBody, &a) != 0 || pthread_join(t, NULL) != 0)
+		return (-1);
+	return (a.e);
+}
+
+static inline struct timespec	pt_absFrom(long long now, long long ns)
+{
+	struct timespec	ts;
+	long long		at = now + ns;
+
+	ts.tv_sec = (time_t)(at / LC_NS_PER_SEC);
+	ts.tv_nsec = (long)(at % LC_NS_PER_SEC);
+	return (ts);
+}
+
+/* @return CLOCK_REALTIME now + ns (ns may be negative: the past). */
+static inline struct timespec	pt_absReal(long long ns)
+{
+	return (pt_absFrom(lc_nowReal(), ns));
+}
+
+/* @return CLOCK_MONOTONIC now + ns. */
+static inline struct timespec	pt_absMono(long long ns)
+{
+	return (pt_absFrom(lc_now(), ns));
 }
 
 #endif
