@@ -10,7 +10,7 @@
  * @file sys.c
  * @brief Raw Linux syscalls for the framework.
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/25 08:41:11 by Moutig
+ * @Updated: 2026/11/28 10:35:14 by Moutig
  *
  * Every system call of the framework goes through lc_syscall3 /
  * lc_syscall6, a few lines of inline asm per architecture, so that the
@@ -61,9 +61,17 @@
 # define LC_NR_WAIT4		61
 # define LC_NR_KILL			62
 # define LC_NR_GETPPID		110
+# define LC_NR_GETUID		102
+# define LC_NR_GETGID		104
+# define LC_NR_GETEGID		108
 # define LC_NR_PRCTL		157
 # define LC_NR_CLOCK_GETTIME	228
 # define LC_NR_CLOCK_NANOSLEEP	230
+# define LC_NR_SYMLINKAT	266
+# define LC_NR_FCHMODAT		268
+# define LC_NR_CHDIR		80
+# define LC_NR_GETCWD		79
+# define LC_NR_GETEUID		107
 
 /*
  * Signal return trampoline. The x86_64 kernel refuses to deliver a
@@ -166,9 +174,17 @@ static long	lc_syscall6(long nr, long a, long b, long c, long d, long e, long f)
 # define LC_NR_WAIT4		260
 # define LC_NR_KILL			129
 # define LC_NR_GETPPID		173
+# define LC_NR_GETUID		174
+# define LC_NR_GETGID		176
+# define LC_NR_GETEGID		177
 # define LC_NR_PRCTL		167
 # define LC_NR_CLOCK_GETTIME	113
 # define LC_NR_CLOCK_NANOSLEEP	115
+# define LC_NR_SYMLINKAT	36
+# define LC_NR_FCHMODAT		53
+# define LC_NR_CHDIR		49
+# define LC_NR_GETCWD		17
+# define LC_NR_GETEUID		175
 
 /* aarch64 returns through the vDSO trampoline: no SA_RESTORER needed. */
 # define LC_SA_RESTORER		0UL
@@ -312,6 +328,39 @@ long	lc_sysUnlink(const char *path)
 	return (lc_syscall6(LC_NR_UNLINKAT, LC_AT_FDCWD, (long)path, 0, 0, 0, 0));
 }
 
+/** unlinkat flag: remove a directory. */
+#define LC_AT_REMOVEDIR	0x200
+
+long	lc_sysRmdir(const char *path)
+{
+	return (lc_syscall6(LC_NR_UNLINKAT, LC_AT_FDCWD, (long)path, LC_AT_REMOVEDIR, 0, 0, 0));
+}
+
+long	lc_sysSymlink(const char *target, const char *path)
+{
+	return (lc_syscall3(LC_NR_SYMLINKAT, (long)target, LC_AT_FDCWD, (long)path));
+}
+
+long	lc_sysChmod(const char *path, int mode)
+{
+	return (lc_syscall6(LC_NR_FCHMODAT, LC_AT_FDCWD, (long)path, mode, 0, 0, 0));
+}
+
+long	lc_sysChdir(const char *path)
+{
+	return (lc_syscall3(LC_NR_CHDIR, (long)path, 0, 0));
+}
+
+long	lc_sysGetcwd(char *buf, unsigned long size)
+{
+	return (lc_syscall3(LC_NR_GETCWD, (long)buf, (long)size, 0));
+}
+
+long	lc_sysGeteuid(void)
+{
+	return (lc_syscall3(LC_NR_GETEUID, 0, 0, 0));
+}
+
 long	lc_sysGettid(void)
 {
 	return (lc_syscall3(LC_NR_GETTID, 0, 0, 0));
@@ -399,6 +448,21 @@ long	lc_sysKill(long pid, int sig)
 long	lc_sysGetppid(void)
 {
 	return (lc_syscall3(LC_NR_GETPPID, 0, 0, 0));
+}
+
+long	lc_sysGetuid(void)
+{
+	return (lc_syscall3(LC_NR_GETUID, 0, 0, 0));
+}
+
+long	lc_sysGetgid(void)
+{
+	return (lc_syscall3(LC_NR_GETGID, 0, 0, 0));
+}
+
+long	lc_sysGetegid(void)
+{
+	return (lc_syscall3(LC_NR_GETEGID, 0, 0, 0));
 }
 
 long	lc_sysPrctl(int op, unsigned long arg)
