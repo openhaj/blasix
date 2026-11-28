@@ -180,6 +180,7 @@ pthread_UNITS := \
 	attr/pthread_attr_setstacksize \
 	defs \
 	mutex/pthread_mutex_clocklock \
+	mutex/pthread_mutex_consistent \
 	mutex/pthread_mutex_destroy \
 	mutex/pthread_mutex_init \
 	mutex/pthread_mutex_lock \

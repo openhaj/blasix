@@ -31,15 +31,19 @@
 # names two options, the line keeps the one that is never stricter than
 # the text when only it is selected, and says so.
 #
-# Host deviations (glibc 2.44), undeclared:
-#   - PTHREAD_MUTEX_DEFAULT, _ERRORCHECK, _NORMAL, _RECURSIVE, _ROBUST,
-#     _STALLED and PTHREAD_PRIO_INHERIT, _NONE, _PROTECT: enumerators
-#     only, never #defined (a symbolic constant is an object-like macro,
-#     XBD 3.363; 3.372 in 2024);
-#   - PTHREAD_NULL (2024): not defined;
-#   - pthread_cond_clockwait, pthread_mutex_clocklock,
+# Host deviations (glibc 2.44):
+#   - undeclared: PTHREAD_MUTEX_DEFAULT, _ERRORCHECK, _NORMAL, _RECURSIVE,
+#     _ROBUST, _STALLED and PTHREAD_PRIO_INHERIT, _NONE, _PROTECT:
+#     enumerators only, never #defined (a symbolic constant is an
+#     object-like macro, XBD 3.363; 3.372 in 2024);
+#   - undeclared: PTHREAD_NULL (2024), not defined;
+#   - undeclared: pthread_cond_clockwait, pthread_mutex_clocklock,
 #     pthread_rwlock_clockrdlock, pthread_rwlock_clockwrlock (2024): only
-#     with _GNU_SOURCE, hidden in strict and lax modes.
+#     with _GNU_SOURCE, hidden in strict and lax modes;
+#   - pthread_mutex_trylock on a robust mutex made not recoverable:
+#     ENOTRECOVERABLE, but the mutex stays taken (another thread's trylock
+#     gives EBUSY, its lock blocks), whereas every lock "shall fail with
+#     ENOTRECOVERABLE" (XSH pthread_mutexattr_getrobust()).
 
 header pthread.h
 
