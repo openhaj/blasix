@@ -18,6 +18,7 @@ CATEGORIES := \
 	fcntl \
 	inttypes \
 	malloc \
+	pthread \
 	stdlib \
 	string \
 	strings \
@@ -46,6 +47,13 @@ BITS_HDRS := \
 	inttypes/wide.h \
 	locale/locale_t.h \
 	locale/locale_t_same.h \
+	pthread/attr.h \
+	pthread/barrier.h \
+	pthread/cancel.h \
+	pthread/initializers.h \
+	pthread/mutex.h \
+	pthread/prio.h \
+	pthread/process.h \
 	stddef/NULL.h \
 	stddef/size_t.h \
 	stddef/wchar_t.h \
@@ -71,6 +79,7 @@ BITS_HDRS := \
 	sys_types/nlink_t.h \
 	sys_types/off_t.h \
 	sys_types/pid_t.h \
+	sys_types/pthread_types.h \
 	sys_types/ssize_t.h \
 	sys_types/time_t.h \
 	sys_types/uid_t.h \
@@ -145,6 +154,11 @@ inttypes_UNITS := \
 
 inttypes_HDRS := \
 	inttypes_cases.h \
+
+# ----- pthread -----
+
+pthread_UNITS := \
+	defs \
 
 # ----- stdlib -----
 
