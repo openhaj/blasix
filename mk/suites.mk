@@ -20,6 +20,7 @@ CATEGORIES := \
 	stdlib \
 	string \
 	strings \
+	unistd \
 
 # ----- bits (shared by several headers) -----
 
@@ -41,7 +42,9 @@ BITS_HDRS := \
 	stddef/size_t.h \
 	stddef/wchar_t.h \
 	stdint/intmax_t.h \
+	stdint/intptr_t.h \
 	stdint/uintmax_t.h \
+	stdio/seek.h \
 	stdlib/EXIT_FAILURE.h \
 	stdlib/EXIT_SUCCESS.h \
 	stdlib/MB_CUR_MAX.h \
@@ -49,8 +52,23 @@ BITS_HDRS := \
 	stdlib/div_t.h \
 	stdlib/ldiv_t.h \
 	stdlib/lldiv_t.h \
+	sys_types/gid_t.h \
+	sys_types/off_t.h \
+	sys_types/pid_t.h \
+	sys_types/ssize_t.h \
+	sys_types/uid_t.h \
+	sys_types/useconds_t.h \
 	threads/ONCE_FLAG_INIT.h \
 	threads/once_flag.h \
+	unistd/access.h \
+	unistd/confstr.h \
+	unistd/fileno.h \
+	unistd/lockf.h \
+	unistd/misc.h \
+	unistd/options.h \
+	unistd/pathconf.h \
+	unistd/sysconf.h \
+	unistd/version.h \
 	version/__STDC_VERSION_INTTYPES_H__.h \
 	version/__STDC_VERSION_STDLIB_H__.h \
 	version/__STDC_VERSION_STRING_H__.h \
@@ -225,3 +243,10 @@ malloc_UNITS := \
 
 malloc_HDRS := \
 	malloc_cases.h \
+
+# ----- unistd -----
+
+unistd_UNITS := \
+	defs \
+
+unistd_HDRS :=

@@ -120,6 +120,8 @@ static const t_optdef	gOpts[] = {
 	{"TSS", NULL, NULL, "Thread Stack Size Attribute"},
 	{"TYM", NULL, NULL, "Typed Memory Objects"},
 	{"XSI", NULL, NULL, "X/Open System Interfaces"},
+	/* XSI option groups (XBD 2.1.5.2) that mark library interfaces. */
+	{"CRYPT", NULL, NULL, "X/Open Encryption Option Group (with XSI): crypt, encrypt, setkey"},
 	{"XSR", NULL, NULL, "XSI STREAMS"},
 };
 

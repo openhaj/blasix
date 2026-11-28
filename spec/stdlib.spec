@@ -45,7 +45,8 @@
 #     2.2.1): mkostemp, ptsname_r, qsort_r, secure_getenv only with
 #     _GNU_SOURCE, reallocarray with _DEFAULT_SOURCE (tested with LAX=1);
 #     WCOREDUMP and the O_* constants are not in <stdlib.h> at all;
-#   - setkey is not declared at all (removed from the headers in 2.28);
+#   - setkey is not declared at all (no Encryption Option Group since 2.28:
+#     correct, CRYPT is off by default);
 #   - rand_r is visible whatever the options: a leak when TSF is off
 #     (POSIX.1-2001) and in POSIX.1-2024, where it is removed (XSH 2.2.1);
 #   - no Annex K: with OPTS=LIB_EXT1 its interfaces are undeclared and the
@@ -186,8 +187,9 @@ ptsname                     POSIX.1-2001   XSI
 unlockpt                    POSIX.1-2001   XSI
 ptsname_r                   POSIX.1-2024   XSI
 putenv                      POSIX.1-2001   XSI
-# Obsolescent in 2024 (Austin Group Defect 1192).
-setkey                      POSIX.1-2001   XSI ob=POSIX.1-2024
+# Encryption Option Group (XBD 2.1.5.2, CRYPT, with XSI); obsolescent in 2024
+# (Austin Group Defect 1192).
+setkey                      POSIX.1-2001   CRYPT ob=POSIX.1-2024
 # LEGACY in 2001, removed in 2008 (XBD <stdlib.h>, Issue 7).
 ecvt                        POSIX.1-2001   XSI ob=POSIX.1-2001 removed=POSIX.1-2008
 fcvt                        POSIX.1-2001   XSI ob=POSIX.1-2001 removed=POSIX.1-2008
