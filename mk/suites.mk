@@ -248,12 +248,19 @@ malloc_HDRS := \
 
 unistd_UNITS := \
 	defs \
+	dir/getcwd \
 	fd/dup2 \
 	fd/pipe \
+	ids/getgid \
+	ids/getpid \
+	ids/getppid \
+	ids/getuid \
 	io/close \
 	io/lseek \
 	io/read \
 	io/write \
+	link/readlink \
+	link/unlink \
 	process/_exit \
 	process/fork \
 

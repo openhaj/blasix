@@ -59,6 +59,9 @@
 #     Encryption Option Group: correct, CRYPT off by default),
 #     _PC_TIMESTAMP_RESOLUTION, _SC_XOPEN_UUCP, _CS_POSIX_V7_THREADS_CFLAGS
 #     and _LDFLAGS (2008, 2017);
+#   - unlink() of a directory fails with EISDIR, the Linux errno, not
+#     EPERM (XSH unlink() ERRORS): unistd/unlink/directory_gives_eperm
+#     fails (with any libc that passes the kernel's errno through);
 #   - POSIX.1-2024: none of its additions is declared under
 #     _POSIX_C_SOURCE=202405L (_Fork, dup3, getentropy, pipe2, posix_close,
 #     the XSI getres*id / setres*id, POSIX_CLOSE_RESTART, SEEK_DATA,
