@@ -15,11 +15,13 @@
 
 CATEGORIES := \
 	ctype \
+	fcntl \
 	inttypes \
 	malloc \
 	stdlib \
 	string \
 	strings \
+	sys_stat \
 	unistd \
 
 # ----- bits (shared by several headers) -----
@@ -29,7 +31,13 @@ BITS_HDRS := \
 	annex_k/errno_t.h \
 	annex_k/lib_ext1.h \
 	annex_k/rsize_t.h \
+	fcntl/at.h \
+	fcntl/commands.h \
+	fcntl/fadv.h \
+	fcntl/fd_flags.h \
+	fcntl/locks.h \
 	fcntl/open_flags.h \
+	fcntl/owner.h \
 	inttypes/convert.h \
 	inttypes/format.h \
 	inttypes/imaxdiv_t.h \
@@ -52,10 +60,19 @@ BITS_HDRS := \
 	stdlib/div_t.h \
 	stdlib/ldiv_t.h \
 	stdlib/lldiv_t.h \
+	sys_stat/file_types.h \
+	sys_stat/mode_bits.h \
+	sys_types/blkcnt_t.h \
+	sys_types/blksize_t.h \
+	sys_types/dev_t.h \
 	sys_types/gid_t.h \
+	sys_types/ino_t.h \
+	sys_types/mode_t.h \
+	sys_types/nlink_t.h \
 	sys_types/off_t.h \
 	sys_types/pid_t.h \
 	sys_types/ssize_t.h \
+	sys_types/time_t.h \
 	sys_types/uid_t.h \
 	sys_types/useconds_t.h \
 	threads/ONCE_FLAG_INIT.h \
@@ -272,3 +289,35 @@ unistd_UNITS := \
 
 unistd_HDRS := \
 	unistd_cases.h \
+
+# ----- fcntl -----
+
+fcntl_UNITS := \
+	control/fcntl \
+	defs \
+	open/creat \
+	open/open \
+	open/openat \
+
+fcntl_HDRS := \
+	fcntl_cases.h \
+
+# ----- sys_stat -----
+
+sys_stat_UNITS := \
+	defs \
+	stat/fstat \
+	type/S_ISBLK \
+	type/S_ISCHR \
+	type/S_ISDIR \
+	type/S_ISFIFO \
+	type/S_ISLNK \
+	type/S_ISREG \
+	type/S_ISSOCK \
+	type/S_TYPEISMQ \
+	type/S_TYPEISSEM \
+	type/S_TYPEISSHM \
+	type/S_TYPEISTMO \
+
+sys_stat_HDRS := \
+	sys_stat_cases.h \
