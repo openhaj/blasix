@@ -159,6 +159,12 @@ inttypes_HDRS := \
 
 pthread_UNITS := \
 	defs \
+	thread/pthread_create \
+	thread/pthread_exit \
+	thread/pthread_join \
+
+pthread_HDRS := \
+	pthread_cases.h \
 
 # ----- stdlib -----
 
