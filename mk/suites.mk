@@ -182,8 +182,10 @@ pthread_UNITS := \
 	mutex/pthread_mutex_clocklock \
 	mutex/pthread_mutex_consistent \
 	mutex/pthread_mutex_destroy \
+	mutex/pthread_mutex_getprioceiling \
 	mutex/pthread_mutex_init \
 	mutex/pthread_mutex_lock \
+	mutex/pthread_mutex_setprioceiling \
 	mutex/pthread_mutex_timedlock \
 	mutex/pthread_mutex_trylock \
 	mutex/pthread_mutex_unlock \
