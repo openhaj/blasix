@@ -178,6 +178,12 @@ pthread_UNITS := \
 	attr/pthread_attr_setstack \
 	attr/pthread_attr_setstackaddr \
 	attr/pthread_attr_setstacksize \
+	condattr/pthread_condattr_destroy \
+	condattr/pthread_condattr_getclock \
+	condattr/pthread_condattr_getpshared \
+	condattr/pthread_condattr_init \
+	condattr/pthread_condattr_setclock \
+	condattr/pthread_condattr_setpshared \
 	defs \
 	mutex/pthread_mutex_clocklock \
 	mutex/pthread_mutex_consistent \

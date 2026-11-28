@@ -10,7 +10,7 @@
  * @file pthread_cases.h
  * @brief Shared helpers of the <pthread.h> units.
  * @Created: 2026/11/28 17:45:51 by Moutig
- * @Updated: 2026/11/28 18:28:57 by Moutig
+ * @Updated: 2026/11/28 18:59:41 by Moutig
  *
  * The threads of a case talk through plain int flags, read and written
  * with the compiler's atomic builtins (no libc, no data race):
@@ -36,7 +36,12 @@
  *     until told to unlock it; pt_tryOther: pthread_mutex_trylock() from
  *     another thread (unlocked again when it succeeds);
  *   - pt_absReal, pt_absMono: an absolute time n nanoseconds from now on
- *     CLOCK_REALTIME or CLOCK_MONOTONIC, for the timed functions.
+ *     CLOCK_REALTIME or CLOCK_MONOTONIC, for the timed functions;
+ *   - pt_cv, pt_cvInit, pt_cvWaiter, pt_cvBlocked: a mutex and a condition
+ *     variable, threads that each wait once on it (with a deadline, so a
+ *     broken libc cannot hang the case) and count how many were woken,
+ *     and a way to know they are all blocked in the wait;
+ *   - pt_nsOf: a struct timespec in nanoseconds.
  *
  * The time and the waits are raw syscalls (lc_now, lc_sleep).
  */
@@ -46,6 +51,7 @@
 
 # include "framework/lc.h"
 # include "framework/sys.h"
+# include <errno.h>
 # include <limits.h>
 # include <pthread.h>
 # include <time.h>
@@ -293,6 +299,77 @@ static inline struct timespec	pt_absReal(long long ns)
 static inline struct timespec	pt_absMono(long long ns)
 {
 	return (pt_absFrom(lc_now(), ns));
+}
+
+/* @return ts in nanoseconds. */
+static inline long long	pt_nsOf(const struct timespec *ts)
+{
+	return ((long long)ts->tv_sec * LC_NS_PER_SEC + ts->tv_nsec);
+}
+
+/* A condition variable, its mutex and what its waiters saw. */
+typedef struct pt_cv
+{
+	pthread_mutex_t	m;
+	pthread_cond_t	c;
+	long long		waitNs;		/* How long each waiter waits at most. */
+	int				waiting;	/* Waiters that reached the wait (under m). */
+	int				woken;		/* Waits that returned 0. */
+	int				owned;		/* Of those, the ones that owned m on return. */
+	int				done;		/* Waiters that have finished. */
+}	pt_cv;
+
+/* @return 0, or an error number. */
+static inline int	pt_cvInit(pt_cv *v, long long waitNs)
+{
+	int	e;
+
+	lc_fill(v, 0, sizeof(*v));
+	v->waitNs = waitNs;
+	e = pthread_mutex_init(&v->m, NULL);
+	if (e == 0)
+		e = pthread_cond_init(&v->c, NULL);
+	return (e);
+}
+
+/*
+ * One wait on v->c (pthread_cond_timedwait(), deadline v->waitNs on
+ * CLOCK_REALTIME): counts it in woken when it returns 0, and in owned when
+ * the waiter then owns the mutex (another thread's trylock is EBUSY).
+ */
+static inline void	*pt_cvWaiter(void *arg)
+{
+	pt_cv			*v = arg;
+	struct timespec	at = pt_absReal(v->waitNs);
+
+	if (pthread_mutex_lock(&v->m) != 0)
+		return (NULL);
+	(void)pt_add(&v->waiting, 1);
+	if (pthread_cond_timedwait(&v->c, &v->m, &at) == 0)
+	{
+		(void)pt_add(&v->woken, 1);
+		if (pt_tryOther(&v->m) == EBUSY)
+			(void)pt_add(&v->owned, 1);
+	}
+	(void)pthread_mutex_unlock(&v->m);
+	(void)pt_add(&v->done, 1);
+	return (NULL);
+}
+
+/*
+ * Wait until n waiters have reached the wait, then lock and unlock the
+ * mutex: each released it by blocking, so all of them are blocked.
+ *
+ * @return 1, or 0 on timeout.
+ */
+static inline int	pt_cvBlocked(pt_cv *v, int n)
+{
+	if (!pt_waitFor(&v->waiting, n))
+		return (0);
+	if (pthread_mutex_lock(&v->m) != 0)
+		return (0);
+	(void)pthread_mutex_unlock(&v->m);
+	return (1);
 }
 
 #endif
