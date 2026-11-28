@@ -59,6 +59,13 @@
 #     Encryption Option Group: correct, CRYPT off by default),
 #     _PC_TIMESTAMP_RESOLUTION, _SC_XOPEN_UUCP, _CS_POSIX_V7_THREADS_CFLAGS
 #     and _LDFLAGS (2008, 2017);
+#   - sysconf(_SC_HOST_NAME_MAX) is 64, below _POSIX_HOST_NAME_MAX (255,
+#     XBD <limits.h>); _POSIX_THREAD_ROBUST_PRIO_INHERIT is 200809L in the
+#     header but sysconf(_SC_THREAD_ROBUST_PRIO_INHERIT) is -1 (XBD 2.1.6:
+#     a constant greater than 0 means always supported at run time);
+#   - getentropy() of more than GETENTROPY_MAX bytes fails with EIO, not
+#     EINVAL (XSH getentropy(), tested with LAX=1: not declared in strict
+#     mode);
 #   - unlink() of a directory fails with EISDIR, the Linux errno, not
 #     EPERM (XSH unlink() ERRORS): unistd/unlink/directory_gives_eperm
 #     fails (with any libc that passes the kernel's errno through);
@@ -497,3 +504,9 @@ getwd                               POSIX.1-2001   XSI ob=POSIX.1-2001 removed=P
 ualarm                              POSIX.1-2001   XSI ob=POSIX.1-2001 removed=POSIX.1-2008
 usleep                              POSIX.1-2001   XSI ob=POSIX.1-2001 removed=POSIX.1-2008
 vfork                               POSIX.1-2001   XSI ob=POSIX.1-2001 removed=POSIX.1-2008
+
+# ----- Extensions (EXT=1): in no standard -----
+# getpagesize: 4.2BSD, LEGACY in SUSv2 and gone from POSIX.1-2001 (BSD
+# getpagesize(3), glibc manual); gettid: Linux, glibc 2.30 gettid(2).
+getpagesize                 EXT            ext=BSD
+gettid                      EXT            ext=GNU

@@ -247,8 +247,11 @@ malloc_HDRS := \
 # ----- unistd -----
 
 unistd_UNITS := \
+	conf/sysconf \
 	defs \
 	dir/getcwd \
+	ext/getpagesize \
+	ext/gettid \
 	fd/dup2 \
 	fd/pipe \
 	ids/getgid \
@@ -256,13 +259,16 @@ unistd_UNITS := \
 	ids/getppid \
 	ids/getuid \
 	io/close \
+	io/isatty \
 	io/lseek \
 	io/read \
 	io/write \
 	link/readlink \
 	link/unlink \
+	misc/getentropy \
 	process/_exit \
 	process/fork \
+	process/usleep \
 
 unistd_HDRS := \
 	unistd_cases.h \
