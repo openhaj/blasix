@@ -10,7 +10,7 @@
  * @file sys.h
  * @brief Raw Linux syscalls used by the framework (x86_64, aarch64).
  * @Created: 2026/11/23 04:18:40 by Moutig
- * @Updated: 2026/11/25 08:40:54 by Moutig
+ * @Updated: 2026/11/28 09:57:21 by Moutig
  *
  * The framework must not depend on the libc under test: these are the
  * only "system" functions it uses. They return what the kernel returns
@@ -270,6 +270,10 @@ long	lc_sysClockNanosleep(int clk, int flags, const struct lc_timespec *req,
 /** fcntl command: get the descriptor flags (used to probe fd 3). */
 # define LC_F_GETFD		1
 
+/** fcntl commands: get and set the file status flags (LC_O_APPEND, LC_O_NONBLOCK). */
+# define LC_F_GETFL		3
+# define LC_F_SETFL		4
+
 /** fcntl command: lowest free descriptor >= arg, close-on-exec set. */
 # define LC_F_DUPFD_CLOEXEC	1030
 
@@ -287,6 +291,12 @@ long	lc_sysClockNanosleep(int clk, int flags, const struct lc_timespec *req,
 
 /** open flag: truncate the file to length 0. */
 # define LC_O_TRUNC		01000
+
+/** open flag: every write goes to the end of the file. */
+# define LC_O_APPEND	02000
+
+/** open / pipe / fcntl flag: non-blocking I/O. */
+# define LC_O_NONBLOCK	04000
 
 /** open / pipe flag: close the descriptor on exec. */
 # define LC_O_CLOEXEC	02000000

@@ -248,5 +248,9 @@ malloc_HDRS := \
 
 unistd_UNITS := \
 	defs \
+	io/close \
+	io/read \
+	io/write \
 
-unistd_HDRS :=
+unistd_HDRS := \
+	unistd_cases.h \

@@ -10,7 +10,7 @@
  * @file exec.c
  * @brief The process pool that runs the tests.
  * @Created: 2026/11/24 08:15:05 by Moutig
- * @Updated: 2026/11/25 09:20:51 by Moutig
+ * @Updated: 2026/11/28 09:57:31 by Moutig
  *
  * Each test runs as `bin --run FUNC NAME` in a fresh process (its own
  * process group), with:
@@ -140,6 +140,8 @@ static int	spawn(t_slot *s, t_test *t)
 		for (int fd = 4; fd < 256; fd++) {
 			close(fd);
 		}
+		/* lcrun ignores SIGPIPE (runAll()); a test starts with the default. */
+		signal(SIGPIPE, SIG_DFL);
 		execl(t->unit->bin, t->unit->bin, "--run", t->func, t->name, (char *)NULL);
 		_exit(127);
 	}
