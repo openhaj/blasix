@@ -178,6 +178,13 @@ pthread_UNITS := \
 	attr/pthread_attr_setstack \
 	attr/pthread_attr_setstackaddr \
 	attr/pthread_attr_setstacksize \
+	cond/pthread_cond_broadcast \
+	cond/pthread_cond_clockwait \
+	cond/pthread_cond_destroy \
+	cond/pthread_cond_init \
+	cond/pthread_cond_signal \
+	cond/pthread_cond_timedwait \
+	cond/pthread_cond_wait \
 	condattr/pthread_condattr_destroy \
 	condattr/pthread_condattr_getclock \
 	condattr/pthread_condattr_getpshared \
