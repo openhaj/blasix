@@ -10,7 +10,7 @@
  * @file exec.c
  * @brief The process pool that runs the tests.
  * @Created: 2026/11/24 08:15:05 by Moutig
- * @Updated: 2026/11/25 09:20:51 by Moutig
+ * @Updated: 2026/11/27 13:22:33 by Moutig
  *
  * Each test runs as `bin --run FUNC NAME` in a fresh process (its own
  * process group), with:
@@ -29,6 +29,7 @@
  */
 
 #include "runner/lcrun.h"
+#include "framework/env.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -107,11 +108,48 @@ static void	setCloexec(int fd)
 	fcntl(fd, F_SETFD, FD_CLOEXEC);
 }
 
+extern char	**environ;
+
+/*
+ * The environment of every test (framework/env.h): lcrun's own without
+ * its BLASIX_ENV_* variables, LC_ENV_FIRST first, the fixed variables
+ * and LC_ENV_LAST last. Built once, before the first fork.
+ */
+static char	**testEnv(void)
+{
+	static char	**env;
+	static char	longVar[sizeof(LC_ENV_LONG_NAME) + LC_ENV_LONG_LEN + 1];
+	size_t		n = 0;
+	size_t		k = 0;
+
+	if (env)
+		return (env);
+	while (environ[n])
+		n++;
+	env = calloc(n + 16, sizeof(*env));
+	if (env == NULL)
+		return (environ);
+	env[k++] = LC_ENV_FIRST "=" LC_ENV_FIRST_VAL;
+	for (size_t i = 0; i < n; i++)
+		if (strncmp(environ[i], LC_ENV_PREFIX, sizeof(LC_ENV_PREFIX) - 1) != 0)
+			env[k++] = environ[i];
+#define LC_ENV_ADD(name, value)	env[k++] = name "=" value;
+	LC_ENV_VARS(LC_ENV_ADD)
+#undef LC_ENV_ADD
+	memcpy(longVar, LC_ENV_LONG_NAME "=", sizeof(LC_ENV_LONG_NAME));
+	memset(longVar + sizeof(LC_ENV_LONG_NAME), LC_ENV_LONG_CHAR, LC_ENV_LONG_LEN);
+	env[k++] = longVar;
+	env[k++] = LC_ENV_LAST "=" LC_ENV_LAST_VAL;
+	env[k] = NULL;
+	return (env);
+}
+
 /**
  * @brief Start one test: `bin --run FUNC NAME` in a new process group.
  *
  * In the child: fd 1 and 2 go to the output pipe, fd 3 to the event
  * pipe, every other descriptor is closed, then the binary is executed
+ * with the test environment (testEnv())
  * (status 127 if it cannot be). The process group lets runAll() kill
  * whatever the test itself forked. The parent keeps the read ends,
  * non-blocking and close-on-exec.
@@ -126,8 +164,16 @@ static int	spawn(t_slot *s, t_test *t)
 	int		out[2];
 	pid_t	pid;
 
+	char	**env = testEnv();
+	char	*argv[5];
+
 	if (pipe(ev) < 0 || pipe(out) < 0)
 		return (-1);
+	argv[0] = t->unit->bin;
+	argv[1] = "--run";
+	argv[2] = t->func;
+	argv[3] = t->name;
+	argv[4] = NULL;
 	pid = fork();
 	if (pid < 0)
 		return (-1);
@@ -140,7 +186,7 @@ static int	spawn(t_slot *s, t_test *t)
 		for (int fd = 4; fd < 256; fd++) {
 			close(fd);
 		}
-		execl(t->unit->bin, t->unit->bin, "--run", t->func, t->name, (char *)NULL);
+		execve(t->unit->bin, argv, env);
 		_exit(127);
 	}
 	setpgid(pid, pid);

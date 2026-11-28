@@ -114,7 +114,22 @@ inttypes_HDRS := \
 # ----- stdlib -----
 
 stdlib_UNITS := \
+	convert/atoi \
+	convert/atol \
+	convert/atoll \
+	convert/strtol \
+	convert/strtoll \
+	convert/strtoul \
+	convert/strtoull \
 	defs \
+	env/getenv \
+	env/putenv \
+	env/setenv \
+	env/unsetenv \
+	exit/_Exit \
+	exit/abort \
+	exit/atexit \
+	exit/exit \
 	memory/aligned_alloc \
 	memory/calloc \
 	memory/free \
@@ -126,10 +141,16 @@ stdlib_UNITS := \
 	memory/reallocarr \
 	memory/reallocarray \
 	memory/reallocf \
+	path/realpath \
+	search/qsort \
 
 stdlib_HDRS := \
+	ato_int.h \
+	env_cases.h \
+	exit_cases.h \
 	stdlib_cases.h \
 	stdlib_procs.h \
+	strto_int.h \
 
 # ----- string -----
 

@@ -322,6 +322,13 @@ needs), `unavailable` (the unit did not build against this libc). The
 first four are failures; `skip` and `unimplemented` did not run and count
 neither as passed nor as failed.
 
+The environment of a test is lcrun's, without its `BLASIX_ENV_*`
+variables, plus fixed ones (`include/framework/env.h`):
+`BLASIX_ENV_FIRST` first, `BLASIX_ENV_LAST` last, and values a unit can
+rely on (empty, with spaces, with `=`, high bytes, 4000 bytes, a name
+that is the prefix of another, two names that differ by case). The
+units of `getenv()` and its family test on them.
+
 Results that come from the spec and the probes, not from a unit, are
 added once the tests ran (`src/runner/run/virtual.c`), so that the
 tables, the totals and the exit status show them like any test:

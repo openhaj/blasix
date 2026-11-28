@@ -82,7 +82,12 @@ libc-prepare:
 	@$(MAKE) --no-print-directory -s -C $(HAJLIBC) >/dev/null
 endif
 
-$(LIBC_ARCHIVE): $(LC_LIBC_BUILT)
+# Copied again when the archiver changes too (its .cmd file): a copy
+# indexed by the wrong one links nothing.
+$(LIBC_ARCHIVE).cmd: FORCE
+	$(call lc_write_cmd,$@,$(LC_AR))
+
+$(LIBC_ARCHIVE): $(LC_LIBC_BUILT) $(LIBC_ARCHIVE).cmd
 	@mkdir -p $(@D)
 	@cp $< $@
 	@$(LC_AR) s $@

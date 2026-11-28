@@ -10,7 +10,7 @@
  * @file sys.h
  * @brief Raw Linux syscalls used by the framework (x86_64, aarch64).
  * @Created: 2026/11/23 04:18:40 by Moutig
- * @Updated: 2026/11/25 08:40:54 by Moutig
+ * @Updated: 2026/11/27 14:03:07 by Moutig
  *
  * The framework must not depend on the libc under test: these are the
  * only "system" functions it uses. They return what the kernel returns
@@ -120,6 +120,56 @@ long	lc_sysMprotect(void *addr, unsigned long len, int prot);
 long	lc_sysUnlink(const char *path);
 
 /**
+ * @brief rmdir(2), through unlinkat(AT_FDCWD, ..., AT_REMOVEDIR).
+ *
+ * @param path Path of the (empty) directory.
+ * @return 0, or -errno.
+ */
+long	lc_sysRmdir(const char *path);
+
+/**
+ * @brief symlink(2), through symlinkat(target, AT_FDCWD, path).
+ *
+ * @param target What the link contains (not checked).
+ * @param path   Path of the link to create.
+ * @return 0, or -errno.
+ */
+long	lc_sysSymlink(const char *target, const char *path);
+
+/**
+ * @brief chmod(2), through fchmodat(AT_FDCWD, ...).
+ *
+ * @param path Path of the file.
+ * @param mode Permission bits.
+ * @return 0, or -errno.
+ */
+long	lc_sysChmod(const char *path, int mode);
+
+/**
+ * @brief chdir(2).
+ *
+ * @param path New current directory.
+ * @return 0, or -errno.
+ */
+long	lc_sysChdir(const char *path);
+
+/**
+ * @brief getcwd(2): the current directory, as the kernel resolves it.
+ *
+ * @param buf  Destination.
+ * @param size Size of @p buf.
+ * @return Length stored, terminating NUL included, or -errno.
+ */
+long	lc_sysGetcwd(char *buf, unsigned long size);
+
+/**
+ * @brief geteuid(2).
+ *
+ * @return Effective user id.
+ */
+long	lc_sysGeteuid(void);
+
+/**
  * @brief gettid(2).
  *
  * @return Thread id of the caller.
@@ -148,6 +198,14 @@ long	lc_sysTgkill(long tgid, long tid, int sig);
  * @return 0, or -errno (-EINVAL for SIGKILL and SIGSTOP).
  */
 long	lc_sysSigaction(int sig, void (*handler)(int), unsigned long flags);
+
+/**
+ * @brief rt_sigprocmask(SIG_BLOCK): add one signal to the blocked ones.
+ *
+ * @param sig Signal number (1 ... 64).
+ * @return 0, or -errno.
+ */
+long	lc_sysBlockSignal(int sig);
 
 /**
  * @brief read(2).
@@ -315,6 +373,13 @@ long	lc_sysClockNanosleep(int clk, int flags, const struct lc_timespec *req,
 
 /** Signal numbers (same on x86_64 and aarch64). */
 # define LC_SIGKILL		9
+
+/** SIGABRT (6 on x86_64 and aarch64). */
+# define LC_SIGABRT		6
+
+/** Signal dispositions of sigaction: default, ignore. */
+# define LC_SIG_DFL		((void (*)(int))0)
+# define LC_SIG_IGN		((void (*)(int))1)
 
 /** sigaction flag: back to SIG_DFL when the handler is entered. */
 # define LC_SA_RESETHAND	0x80000000UL
