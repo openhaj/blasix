@@ -10,7 +10,7 @@
  * @file sys.h
  * @brief Raw Linux syscalls used by the framework (x86_64, aarch64).
  * @Created: 2026/11/23 04:18:40 by Moutig
- * @Updated: 2026/11/28 10:52:36 by Moutig
+ * @Updated: 2026/11/28 12:01:22 by Moutig
  *
  * The framework must not depend on the libc under test: these are the
  * only "system" functions it uses. They return what the kernel returns
@@ -297,6 +297,41 @@ long	lc_sysGetegid(void);
  * @return The result of the request, or -errno.
  */
 long	lc_sysIoctl(int fd, unsigned long req, void *arg);
+
+/**
+ * @brief umask(2).
+ *
+ * @param mask New file mode creation mask.
+ * @return The previous mask.
+ */
+long	lc_sysUmask(int mask);
+
+/**
+ * @brief statx(2), the basic statistics: the same layout on x86_64 and
+ *        aarch64 (struct statx, 256 bytes; offsets in LC_STX_*).
+ *
+ * @param dirfd LC_AT_FDCWD, or the descriptor itself with path "" and
+ *              LC_AT_EMPTY_PATH.
+ * @param path  Path.
+ * @param flags 0, LC_AT_EMPTY_PATH, LC_AT_SYMLINK_NOFOLLOW.
+ * @param buf   At least 256 bytes, 8-aligned.
+ * @return 0, or -errno.
+ */
+long	lc_sysStatx(int dirfd, const char *path, int flags, void *buf);
+
+/** statx(2): dirfd for the current directory, flags, field offsets. */
+# define LC_AT_FDCWD			(-100)
+# define LC_AT_SYMLINK_NOFOLLOW	0x100
+# define LC_AT_EMPTY_PATH		0x1000
+# define LC_STX_NLINK		16	/* u32 */
+# define LC_STX_UID			20	/* u32 */
+# define LC_STX_GID			24	/* u32 */
+# define LC_STX_MODE		28	/* u16 */
+# define LC_STX_INO			32	/* u64 */
+# define LC_STX_SIZE		40	/* u64 */
+# define LC_STX_MTIME		112	/* s64 seconds, u32 nanoseconds */
+# define LC_STX_RDEV_MAJOR	128	/* u32 */
+# define LC_STX_DEV_MAJOR	136	/* u32 */
 
 /**
  * @brief prctl(2), one integer argument.

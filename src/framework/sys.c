@@ -10,7 +10,7 @@
  * @file sys.c
  * @brief Raw Linux syscalls for the framework.
  * @Created: 2026/11/23 04:42:37 by Moutig
- * @Updated: 2026/11/28 10:52:28 by Moutig
+ * @Updated: 2026/11/28 12:01:31 by Moutig
  *
  * Every system call of the framework goes through lc_syscall3 /
  * lc_syscall6, a few lines of inline asm per architecture, so that the
@@ -65,6 +65,8 @@
 # define LC_NR_GETGID		104
 # define LC_NR_GETEGID		108
 # define LC_NR_IOCTL			16
+# define LC_NR_UMASK			95
+# define LC_NR_STATX			332
 # define LC_NR_PRCTL		157
 # define LC_NR_CLOCK_GETTIME	228
 # define LC_NR_CLOCK_NANOSLEEP	230
@@ -179,6 +181,8 @@ static long	lc_syscall6(long nr, long a, long b, long c, long d, long e, long f)
 # define LC_NR_GETGID		176
 # define LC_NR_GETEGID		177
 # define LC_NR_IOCTL			29
+# define LC_NR_UMASK			166
+# define LC_NR_STATX			291
 # define LC_NR_PRCTL		167
 # define LC_NR_CLOCK_GETTIME	113
 # define LC_NR_CLOCK_NANOSLEEP	115
@@ -470,6 +474,17 @@ long	lc_sysGetegid(void)
 long	lc_sysIoctl(int fd, unsigned long req, void *arg)
 {
 	return (lc_syscall3(LC_NR_IOCTL, fd, (long)req, (long)arg));
+}
+
+long	lc_sysUmask(int mask)
+{
+	return (lc_syscall3(LC_NR_UMASK, mask, 0, 0));
+}
+
+long	lc_sysStatx(int dirfd, const char *path, int flags, void *buf)
+{
+	return (lc_syscall6(LC_NR_STATX, dirfd, (long)path, flags, 0x7ff /* STATX_BASIC_STATS */,
+			(long)buf, 0));
 }
 
 long	lc_sysPrctl(int op, unsigned long arg)
