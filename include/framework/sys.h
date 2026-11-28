@@ -10,7 +10,7 @@
  * @file sys.h
  * @brief Raw Linux syscalls used by the framework (x86_64, aarch64).
  * @Created: 2026/11/23 04:18:40 by Moutig
- * @Updated: 2026/11/28 10:35:03 by Moutig
+ * @Updated: 2026/11/28 10:52:36 by Moutig
  *
  * The framework must not depend on the libc under test: these are the
  * only "system" functions it uses. They return what the kernel returns
@@ -287,6 +287,16 @@ long	lc_sysGetppid(void);
 long	lc_sysGetuid(void);
 long	lc_sysGetgid(void);
 long	lc_sysGetegid(void);
+
+/**
+ * @brief ioctl(2), one pointer argument.
+ *
+ * @param fd  File descriptor.
+ * @param req Request (Linux value).
+ * @param arg Argument.
+ * @return The result of the request, or -errno.
+ */
+long	lc_sysIoctl(int fd, unsigned long req, void *arg);
 
 /**
  * @brief prctl(2), one integer argument.
