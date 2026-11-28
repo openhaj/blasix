@@ -33,8 +33,9 @@
 #
 # Host deviations (glibc 2.44), undeclared:
 #   - PTHREAD_MUTEX_DEFAULT, _ERRORCHECK, _NORMAL, _RECURSIVE, _ROBUST,
-#     _STALLED: enumerators only, never #defined (a symbolic constant is
-#     an object-like macro, XBD 3.363; 3.372 in 2024);
+#     _STALLED and PTHREAD_PRIO_INHERIT, _NONE, _PROTECT: enumerators
+#     only, never #defined (a symbolic constant is an object-like macro,
+#     XBD 3.363; 3.372 in 2024);
 #   - PTHREAD_NULL (2024): not defined;
 #   - pthread_cond_clockwait, pthread_mutex_clocklock,
 #     pthread_rwlock_clockrdlock, pthread_rwlock_clockwrlock (2024): only
