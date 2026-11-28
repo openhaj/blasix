@@ -179,9 +179,11 @@ pthread_UNITS := \
 	attr/pthread_attr_setstackaddr \
 	attr/pthread_attr_setstacksize \
 	defs \
+	mutex/pthread_mutex_clocklock \
 	mutex/pthread_mutex_destroy \
 	mutex/pthread_mutex_init \
 	mutex/pthread_mutex_lock \
+	mutex/pthread_mutex_timedlock \
 	mutex/pthread_mutex_trylock \
 	mutex/pthread_mutex_unlock \
 	mutexattr/pthread_mutexattr_destroy \
