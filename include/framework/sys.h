@@ -10,7 +10,7 @@
  * @file sys.h
  * @brief Raw Linux syscalls used by the framework (x86_64, aarch64).
  * @Created: 2026/11/23 04:18:40 by Moutig
- * @Updated: 2026/11/27 14:03:07 by Moutig
+ * @Updated: 2026/11/28 12:41:20 by Moutig
  *
  * The framework must not depend on the libc under test: these are the
  * only "system" functions it uses. They return what the kernel returns
@@ -287,6 +287,61 @@ long	lc_sysKill(long pid, int sig);
 long	lc_sysGetppid(void);
 
 /**
+ * @brief getuid(2), getgid(2), getegid(2): real user ID, real and
+ *        effective group IDs (lc_sysGeteuid gives the effective user ID).
+ *
+ * @return The ID.
+ */
+long	lc_sysGetuid(void);
+long	lc_sysGetgid(void);
+long	lc_sysGetegid(void);
+
+/**
+ * @brief ioctl(2), one pointer argument.
+ *
+ * @param fd  File descriptor.
+ * @param req Request (Linux value).
+ * @param arg Argument.
+ * @return The result of the request, or -errno.
+ */
+long	lc_sysIoctl(int fd, unsigned long req, void *arg);
+
+/**
+ * @brief umask(2).
+ *
+ * @param mask New file mode creation mask.
+ * @return The previous mask.
+ */
+long	lc_sysUmask(int mask);
+
+/**
+ * @brief statx(2), the basic statistics: the same layout on x86_64 and
+ *        aarch64 (struct statx, 256 bytes; offsets in LC_STX_*).
+ *
+ * @param dirfd LC_AT_FDCWD, or the descriptor itself with path "" and
+ *              LC_AT_EMPTY_PATH.
+ * @param path  Path.
+ * @param flags 0, LC_AT_EMPTY_PATH, LC_AT_SYMLINK_NOFOLLOW.
+ * @param buf   At least 256 bytes, 8-aligned.
+ * @return 0, or -errno.
+ */
+long	lc_sysStatx(int dirfd, const char *path, int flags, void *buf);
+
+/** statx(2): dirfd for the current directory, flags, field offsets. */
+# define LC_AT_FDCWD			(-100)
+# define LC_AT_SYMLINK_NOFOLLOW	0x100
+# define LC_AT_EMPTY_PATH		0x1000
+# define LC_STX_NLINK		16	/* u32 */
+# define LC_STX_UID			20	/* u32 */
+# define LC_STX_GID			24	/* u32 */
+# define LC_STX_MODE		28	/* u16 */
+# define LC_STX_INO			32	/* u64 */
+# define LC_STX_SIZE		40	/* u64 */
+# define LC_STX_MTIME		112	/* s64 seconds, u32 nanoseconds */
+# define LC_STX_RDEV_MAJOR	128	/* u32 */
+# define LC_STX_DEV_MAJOR	136	/* u32 */
+
+/**
  * @brief prctl(2), one integer argument.
  *
  * @param op  LC_PR_* operation.
@@ -328,6 +383,10 @@ long	lc_sysClockNanosleep(int clk, int flags, const struct lc_timespec *req,
 /** fcntl command: get the descriptor flags (used to probe fd 3). */
 # define LC_F_GETFD		1
 
+/** fcntl commands: get and set the file status flags (LC_O_APPEND, LC_O_NONBLOCK). */
+# define LC_F_GETFL		3
+# define LC_F_SETFL		4
+
 /** fcntl command: lowest free descriptor >= arg, close-on-exec set. */
 # define LC_F_DUPFD_CLOEXEC	1030
 
@@ -345,6 +404,12 @@ long	lc_sysClockNanosleep(int clk, int flags, const struct lc_timespec *req,
 
 /** open flag: truncate the file to length 0. */
 # define LC_O_TRUNC		01000
+
+/** open flag: every write goes to the end of the file. */
+# define LC_O_APPEND	02000
+
+/** open / pipe / fcntl flag: non-blocking I/O. */
+# define LC_O_NONBLOCK	04000
 
 /** open / pipe flag: close the descriptor on exec. */
 # define LC_O_CLOEXEC	02000000
