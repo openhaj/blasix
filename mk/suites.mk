@@ -161,12 +161,20 @@ pthread_UNITS := \
 	attr/pthread_attr_destroy \
 	attr/pthread_attr_getdetachstate \
 	attr/pthread_attr_getguardsize \
+	attr/pthread_attr_getinheritsched \
+	attr/pthread_attr_getschedparam \
+	attr/pthread_attr_getschedpolicy \
+	attr/pthread_attr_getscope \
 	attr/pthread_attr_getstack \
 	attr/pthread_attr_getstackaddr \
 	attr/pthread_attr_getstacksize \
 	attr/pthread_attr_init \
 	attr/pthread_attr_setdetachstate \
 	attr/pthread_attr_setguardsize \
+	attr/pthread_attr_setinheritsched \
+	attr/pthread_attr_setschedparam \
+	attr/pthread_attr_setschedpolicy \
+	attr/pthread_attr_setscope \
 	attr/pthread_attr_setstack \
 	attr/pthread_attr_setstackaddr \
 	attr/pthread_attr_setstacksize \
