@@ -160,8 +160,11 @@ inttypes_HDRS := \
 pthread_UNITS := \
 	defs \
 	thread/pthread_create \
+	thread/pthread_detach \
+	thread/pthread_equal \
 	thread/pthread_exit \
 	thread/pthread_join \
+	thread/pthread_self \
 
 pthread_HDRS := \
 	pthread_cases.h \
